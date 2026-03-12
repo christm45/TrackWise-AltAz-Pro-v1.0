@@ -18,8 +18,8 @@ TrackWise AltAz Pro is a full-featured telescope controller Android app designed
 | Mount / Protocol | Connection |
 |---|---|
 | **OnStep / OnStepX** | WiFi (TCP) |
-| **SynScan / Sky-Watcher** | WiFi (TCP) |
-| **Celestron NexStar** | WiFi / USB Serial |
+| **SynScan / Sky-Watcher** | WiFi (TCP) + Extended Features |
+| **Celestron NexStar** | WiFi / USB Serial + Extended Features |
 | **Meade LX200-compatible** | WiFi / USB Serial |
 
 ### Architecture
@@ -161,6 +161,7 @@ The complete user guide is included in this repository:
 14. **Session Recording & Export** - CSV export, crash recovery
 15. **Raspberry Pi Deployment** - Headless server setup
 16. **OnStep Extended Features** - Auxiliary ports, interval control
+16b. **NexStar/SynScan Extended Features** - Backlash compensation, altitude limits, guide rate, hibernate, speed compensation, tracking rate
 17. **Troubleshooting** - Common issues and solutions
 18. **Hardware Compatibility** - Tested mounts, cameras, platforms
 19. **UI & Accessibility** - Night mode, themes, large text, high contrast

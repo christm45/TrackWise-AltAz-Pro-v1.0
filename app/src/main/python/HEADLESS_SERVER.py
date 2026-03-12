@@ -334,6 +334,11 @@ class HeadlessTelescopeApp:
         self.rotator_status_var = HeadlessVar("Stopped")
         self.rotator_derotating_var = HeadlessVar(False)
 
+        # NexStar/SynScan-specific features (app-side)
+        self.guide_rate_var = HeadlessVar("7.5")  # arcsec/sec
+        self.speed_comp_ppm_var = HeadlessVar("0.0")  # ppm
+        self.hibernate_status_var = HeadlessVar("No saved position")
+
         # Firmware/status polling control
         self._firmware_queried = False  # query once on connect
         self._onstep_poll_counter = 0   # throttle polling to every N ticks
@@ -1685,6 +1690,96 @@ class HeadlessTelescopeApp:
                 )
         except Exception as e:
             self._log(f"Firmware query error: {e}", "error")
+
+    # ------------------------------------------------------------------
+    # NexStar/SynScan: Guide Rate
+    # ------------------------------------------------------------------
+
+    def _set_guide_rate(self, rate_arcsec: float):
+        """Set autoguide rate in arcsec/sec via NexStar passthrough."""
+        bridge = self._get_active_bridge()
+        if bridge.is_connected:
+            mp = self.telescope_bridge.mount_protocol
+            if hasattr(mp, 'set_guide_rate'):
+                result = mp.set_guide_rate(rate_arcsec, bridge.send_command)
+                if result.success:
+                    self.guide_rate_var.set(f"{rate_arcsec:.1f}")
+                    self._log(result.message, "success")
+                else:
+                    self._log(f"Set guide rate failed: {result.message}", "error")
+            else:
+                self._log("Guide rate not supported by this protocol", "warning")
+        else:
+            self._log("Cannot set guide rate: not connected", "warning")
+
+    # ------------------------------------------------------------------
+    # NexStar/SynScan: Hibernate (Position Save/Restore)
+    # ------------------------------------------------------------------
+
+    def _hibernate_save(self):
+        """Save current mount position for later restoration."""
+        bridge = self._get_active_bridge()
+        if bridge.is_connected:
+            mp = self.telescope_bridge.mount_protocol
+            if hasattr(mp, 'hibernate_save'):
+                result = mp.hibernate_save(bridge.send_command)
+                if result.success:
+                    self.hibernate_status_var.set("Position saved")
+                    self._log(result.message, "success")
+                    # Persist to config
+                    pos = mp.get_hibernate_position()
+                    if pos and self.config_manager:
+                        self.config_manager.set("nexstar.hibernate_azm", pos['azm'])
+                        self.config_manager.set("nexstar.hibernate_alt", pos['alt'])
+                        self.config_manager.save()
+                else:
+                    self._log(f"Hibernate save failed: {result.message}", "error")
+            else:
+                self._log("Hibernate not supported by this protocol", "warning")
+        else:
+            self._log("Cannot save position: not connected", "warning")
+
+    def _hibernate_restore(self):
+        """Restore previously saved mount position."""
+        bridge = self._get_active_bridge()
+        if bridge.is_connected:
+            mp = self.telescope_bridge.mount_protocol
+            if hasattr(mp, 'hibernate_restore'):
+                # Try to load from config if not in memory
+                if mp.get_hibernate_position() is None and self.config_manager:
+                    azm = self.config_manager.get("nexstar.hibernate_azm", None)
+                    alt = self.config_manager.get("nexstar.hibernate_alt", None)
+                    if azm is not None and alt is not None:
+                        mp.set_hibernate_position(float(azm), float(alt))
+
+                result = mp.hibernate_restore(bridge.send_command)
+                if result.success:
+                    self.hibernate_status_var.set("Restoring...")
+                    self._log(result.message, "success")
+                else:
+                    self._log(f"Hibernate restore failed: {result.message}", "error")
+            else:
+                self._log("Hibernate not supported by this protocol", "warning")
+        else:
+            self._log("Cannot restore position: not connected", "warning")
+
+    # ------------------------------------------------------------------
+    # NexStar/SynScan: Speed Compensation (ppm)
+    # ------------------------------------------------------------------
+
+    def _set_speed_compensation(self, ppm: float):
+        """Set tracking speed compensation in parts-per-million."""
+        bridge = self._get_active_bridge()
+        mp = self.telescope_bridge.mount_protocol
+        if hasattr(mp, 'set_speed_compensation'):
+            result = mp.set_speed_compensation(ppm, bridge.send_command if bridge.is_connected else None)
+            if result.success:
+                self.speed_comp_ppm_var.set(f"{ppm:.1f}")
+                self._log(result.message, "success")
+            else:
+                self._log(f"Speed comp failed: {result.message}", "error")
+        else:
+            self._log("Speed compensation not supported by this protocol", "warning")
 
     # ------------------------------------------------------------------
     # OnStep Extended: Extended Focuser

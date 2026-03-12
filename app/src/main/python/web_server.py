@@ -423,6 +423,16 @@ class TelescopeWebServer:
                 except Exception:
                     connection[key] = ""
 
+        # Expose OnStep detection flag and protocol name to frontend
+        # so the UI can hide panels that don't apply to the connected
+        # controller (e.g. hide OnStep-specific panels when a NexStar
+        # or iOptron mount is connected).
+        bridge = getattr(app, '_get_active_bridge', lambda: None)()
+        if bridge is None:
+            bridge = getattr(app, 'telescope_bridge', None)
+        connection['is_onstep'] = getattr(bridge, 'is_onstep', False) if bridge else False
+        connection['protocol_name'] = connection.get('protocol', 'lx200')
+
         # ---- Tracking ------------------------------------------------
         tracking_state: Dict[str, Any] = {
             "is_running": tracking.is_running if tracking else False,
@@ -650,6 +660,16 @@ class TelescopeWebServer:
         rdr_var = getattr(app, 'rotator_derotating_var', None)
         onstep['rotator_derotating'] = rdr_var.get() if rdr_var else False
 
+        # ---- NexStar/SynScan-specific features -------------------------
+        nexstar: Dict[str, Any] = {}
+        for attr, key in [
+            ('guide_rate_var', 'guide_rate'),
+            ('speed_comp_ppm_var', 'speed_comp_ppm'),
+            ('hibernate_status_var', 'hibernate_status'),
+        ]:
+            var = getattr(app, attr, None)
+            nexstar[key] = var.get() if var else '--'
+
         return {
             "timestamp": time.time(),
             "platform": "android" if _IS_ANDROID else "desktop",
@@ -664,6 +684,7 @@ class TelescopeWebServer:
             "camera": camera,
             "session": session,
             "onstep": onstep,
+            "nexstar": nexstar,
         }
 
     # ------------------------------------------------------------------
@@ -1782,6 +1803,78 @@ class TelescopeWebServer:
                 return err
             return _run(server.app_ref._query_firmware_info,
                         "Firmware refresh")
+
+        # ============================================================
+        # NexStar/SynScan: Guide Rate
+        # ============================================================
+
+        @flask_app.route("/api/mount/guide_rate", methods=["POST"])
+        def api_mount_guide_rate():
+            err = _require_connection()
+            if err:
+                return err
+            data = request.get_json(silent=True) or {}
+            try:
+                rate = float(data.get("rate", 7.5))
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "Invalid rate"}), 400
+            return _run(lambda: server.app_ref._set_guide_rate(rate),
+                        "Guide rate")
+
+        @flask_app.route("/api/mount/guide_rate/get", methods=["GET"])
+        def api_mount_guide_rate_get():
+            return jsonify({
+                "ok": True,
+                "rate": server.app_ref.guide_rate_var.get(),
+            })
+
+        # ============================================================
+        # NexStar/SynScan: Hibernate (Position Save/Restore)
+        # ============================================================
+
+        @flask_app.route("/api/mount/hibernate/save", methods=["POST"])
+        def api_hibernate_save():
+            err = _require_connection()
+            if err:
+                return err
+            return _run(server.app_ref._hibernate_save,
+                        "Hibernate save")
+
+        @flask_app.route("/api/mount/hibernate/restore", methods=["POST"])
+        def api_hibernate_restore():
+            err = _require_connection()
+            if err:
+                return err
+            return _run(server.app_ref._hibernate_restore,
+                        "Hibernate restore")
+
+        @flask_app.route("/api/mount/hibernate/status", methods=["GET"])
+        def api_hibernate_status():
+            return jsonify({
+                "ok": True,
+                "status": server.app_ref.hibernate_status_var.get(),
+            })
+
+        # ============================================================
+        # NexStar/SynScan: Speed Compensation (ppm)
+        # ============================================================
+
+        @flask_app.route("/api/mount/speed_comp", methods=["POST"])
+        def api_mount_speed_comp():
+            data = request.get_json(silent=True) or {}
+            try:
+                ppm = float(data.get("ppm", 0.0))
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "Invalid ppm"}), 400
+            return _run(lambda: server.app_ref._set_speed_compensation(ppm),
+                        "Speed compensation")
+
+        @flask_app.route("/api/mount/speed_comp/get", methods=["GET"])
+        def api_mount_speed_comp_get():
+            return jsonify({
+                "ok": True,
+                "ppm": server.app_ref.speed_comp_ppm_var.get(),
+            })
 
         # ============================================================
         # OnStep Extended: Extended Focuser
@@ -5004,6 +5097,57 @@ html.highcontrast header{backdrop-filter:none!important;background:rgba(5,5,16,.
 
   </div>
 
+  <!-- NexStar/SynScan: Guide Rate -->
+  <div class="card" id="nexstar-guide-rate-card">
+    <h2>Guide Rate</h2>
+    <div class="text-dim" style="font-size:.82em">
+      Current: <span id="ns-guide-rate">--</span> "/sec
+    </div>
+    <div class="input-row mt-1" style="margin:4px 0">
+      <label style="font-size:.8em;min-width:40px">Rate</label>
+      <input type="number" id="ns-guide-rate-input" placeholder="arcsec/s" min="0.1" max="30" step="0.1" style="max-width:80px;font-size:.8em">
+      <button class="btn btn-dim btn-sm" onclick="setGuideRate()" style="font-size:.72em;padding:3px 6px">Set</button>
+    </div>
+    <div class="text-dim" style="font-size:.7em;margin-top:2px">
+      Presets:
+      <span style="cursor:pointer;text-decoration:underline" onclick="setGuideRatePreset(3.75)">0.25x</span> &nbsp;
+      <span style="cursor:pointer;text-decoration:underline" onclick="setGuideRatePreset(7.5)">0.5x</span> &nbsp;
+      <span style="cursor:pointer;text-decoration:underline" onclick="setGuideRatePreset(15.04)">1x</span> &nbsp;
+      (sidereal)
+    </div>
+  </div>
+
+  <!-- NexStar/SynScan: Hibernate / Position Save -->
+  <div class="card" id="nexstar-hibernate-card">
+    <h2>Hibernate / Position Save</h2>
+    <div class="text-dim" style="font-size:.82em">
+      Status: <span id="ns-hibernate-status">No saved position</span>
+    </div>
+    <div class="btn-row mt-1">
+      <button class="btn btn-dim btn-sm" onclick="apiPost('/api/mount/hibernate/save')">Save Position</button>
+      <button class="btn btn-accent btn-sm" onclick="apiPost('/api/mount/hibernate/restore')">Restore Position</button>
+    </div>
+    <div class="text-dim" style="font-size:.7em;margin-top:2px">
+      Save before power-off; restore after power cycle to resume tracking.
+    </div>
+  </div>
+
+  <!-- NexStar/SynScan: Speed Compensation (ppm) -->
+  <div class="card" id="nexstar-speed-comp-card">
+    <h2>Speed Compensation</h2>
+    <div class="text-dim" style="font-size:.82em">
+      Current: <span id="ns-speed-comp">0.0</span> ppm
+    </div>
+    <div class="input-row mt-1" style="margin:4px 0">
+      <label style="font-size:.8em;min-width:36px">ppm</label>
+      <input type="number" id="ns-speed-comp-input" placeholder="ppm" min="-100" max="100" step="0.1" style="max-width:80px;font-size:.8em">
+      <button class="btn btn-dim btn-sm" onclick="setSpeedComp()" style="font-size:.72em;padding:3px 6px">Set</button>
+    </div>
+    <div class="text-dim" style="font-size:.7em;margin-top:2px">
+      Corrects tracking clock drift. +ppm = faster, -ppm = slower.
+    </div>
+  </div>
+
   <!-- Auxiliary Features (OnStepX) -->
   <div class="card" id="auxiliary-card">
     <h2>Auxiliary Features</h2>
@@ -5837,6 +5981,68 @@ async function pollStatus() {
   const w = s.weather || {};
   const ctrl = s.controls || {};
 
+  // ---- Adaptive UI: show/hide protocol-specific panels ----
+  // Three tiers: OnStep-only, NexStar-specific, and shared panels.
+  // Before connection, show all panels so user sees the full UI.
+  const isOnStep = c.is_onstep || false;
+  const protoName = (c.protocol_name || 'lx200').toLowerCase();
+  const nowConnected = (c.connected || false) || (c.simulator_active || false);
+  const isNexStar = protoName === 'nexstar';
+
+  // Show OnStep panels if OnStep, or not connected yet (full UI)
+  const showOnStepPanels = isOnStep || !nowConnected;
+  // Show NexStar panels if NexStar, or not connected yet (full UI)
+  const showNexStarPanels = isNexStar || !nowConnected;
+  // Show shared panels (firmware, backlash, limits) for OnStep OR NexStar
+  const showSharedPanels = isOnStep || isNexStar || !nowConnected;
+
+  // OnStep-ONLY panels (not shared with NexStar)
+  const onstepOnlyPanels = [
+    'focuser-extended',    // Extended Focuser (OnStepX)
+    'rotator-card',        // Rotator (OnStepX)
+    'park-card',           // Extended Park/Unpark/Home
+    'mount-pec-card',      // Mount PEC (OnStepX)
+    'auxiliary-card',      // Auxiliary Features (Control tab)
+    'auxiliary-card-loc',  // Auxiliary Features (Settings tab)
+  ];
+  for (const id of onstepOnlyPanels) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showOnStepPanels ? '' : 'none';
+  }
+
+  // Shared panels: visible for OnStep AND NexStar
+  const sharedPanels = [
+    'firmware-card',       // Firmware info (OnStep + NexStar)
+    'backlash-card',       // Backlash Config (OnStep mount-side, NexStar app-side)
+    'limits-card',         // Mount Limits (OnStep mount-side, NexStar app-side)
+    'tracking-rate-card',  // Tracking Rate control (OnStep + NexStar T command)
+  ];
+  for (const id of sharedPanels) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showSharedPanels ? '' : 'none';
+  }
+
+  // NexStar/SynScan-ONLY panels (guide rate, hibernate, speed comp)
+  const nexstarOnlyPanels = [
+    'nexstar-guide-rate-card',    // Guide rate setting
+    'nexstar-hibernate-card',     // Hibernate / position save
+    'nexstar-speed-comp-card',    // Speed compensation (ppm)
+  ];
+  for (const id of nexstarOnlyPanels) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showNexStarPanels ? '' : 'none';
+  }
+
+  // OnStep-only buttons inside otherwise-universal panels
+  const onstepOnlyButtons = [
+    'btn-init-unpark',       // Unpark button (Settings init area)
+    'btn-init-return-home',  // Find Home button (Settings init area)
+  ];
+  for (const id of onstepOnlyButtons) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showOnStepPanels ? '' : 'none';
+  }
+
   // Header
   const connected = c.connected || false;
   const simActive = c.simulator_active || false;
@@ -6110,6 +6316,12 @@ async function pollStatus() {
   if (rotDerotBtn) {
     rotDerotBtn.textContent = os.rotator_derotating ? 'Derotate Off' : 'Derotate On';
   }
+
+  // NexStar/SynScan-specific state
+  const ns = s.nexstar || {};
+  setText('ns-guide-rate', ns.guide_rate || '--');
+  setText('ns-hibernate-status', ns.hibernate_status || 'No saved position');
+  setText('ns-speed-comp', ns.speed_comp_ppm || '0.0');
 
   // Auxiliary features (Control tab - simple sliders)
   const auxList = document.getElementById('aux-features-list');
@@ -6492,6 +6704,29 @@ function setLimit(type) {
   const val = parseInt(el.value);
   if (isNaN(val)) { alert('Enter degrees'); return; }
   apiPost('/api/mount/limits', { type, degrees: val });
+}
+
+// NexStar: Guide Rate
+function setGuideRate() {
+  const el = document.getElementById('ns-guide-rate-input');
+  if (!el) return;
+  const val = parseFloat(el.value);
+  if (isNaN(val) || val <= 0) { alert('Enter a positive rate in arcsec/sec'); return; }
+  apiPost('/api/mount/guide_rate', { rate: val });
+}
+function setGuideRatePreset(rate) {
+  const el = document.getElementById('ns-guide-rate-input');
+  if (el) el.value = rate;
+  apiPost('/api/mount/guide_rate', { rate });
+}
+
+// NexStar: Speed Compensation
+function setSpeedComp() {
+  const el = document.getElementById('ns-speed-comp-input');
+  if (!el) return;
+  const val = parseFloat(el.value);
+  if (isNaN(val)) { alert('Enter a ppm value'); return; }
+  apiPost('/api/mount/speed_comp', { ppm: val });
 }
 
 // OnStep: Auxiliary

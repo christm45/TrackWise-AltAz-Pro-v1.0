@@ -422,6 +422,15 @@ body.in-iframe .iframe-top-btn{display:flex}
     <li><a href="#ch15-limits" data-section="ch15-limits" class="sub-link">Mount Limits</a></li>
     <li><a href="#ch15-aux" data-section="ch15-aux" class="sub-link">Auxiliary Features</a></li>
     <li><a href="#ch15-firmware" data-section="ch15-firmware" class="sub-link">Firmware Info</a></li>
+    <li><a href="#ch15b" data-section="ch15b">&#128301; 15b. NexStar/SynScan Extended</a></li>
+    <li><a href="#ch15b-firmware" data-section="ch15b-firmware" class="sub-link">Firmware Display</a></li>
+    <li><a href="#ch15b-backlash" data-section="ch15b-backlash" class="sub-link">Backlash Compensation</a></li>
+    <li><a href="#ch15b-limits" data-section="ch15b-limits" class="sub-link">Altitude Limits</a></li>
+    <li><a href="#ch15b-guiderate" data-section="ch15b-guiderate" class="sub-link">Guide Rate</a></li>
+    <li><a href="#ch15b-hibernate" data-section="ch15b-hibernate" class="sub-link">Hibernate</a></li>
+    <li><a href="#ch15b-speedcomp" data-section="ch15b-speedcomp" class="sub-link">Speed Compensation</a></li>
+    <li><a href="#ch15b-trackrate" data-section="ch15b-trackrate" class="sub-link">Tracking Rate</a></li>
+    <li><a href="#ch15b-api" data-section="ch15b-api" class="sub-link">API Reference</a></li>
     <li><a href="#ch16" data-section="ch16">&#128736;&#65039; 16. Troubleshooting</a></li>
     <li><a href="#ch17" data-section="ch17">&#128187; 17. Hardware</a></li>
     <li><a href="#ch18" data-section="ch18">&#127912; 18. UI &amp; Accessibility</a></li>
@@ -507,6 +516,15 @@ body.in-iframe .iframe-top-btn{display:flex}
     <a onclick="tocNav('ch15-limits')" class="itoc-sub">Mount Limits</a>
     <a onclick="tocNav('ch15-aux')" class="itoc-sub">Auxiliary Features</a>
     <a onclick="tocNav('ch15-firmware')" class="itoc-sub">Firmware Info</a>
+    <a onclick="tocNav('ch15b')">&#128301; 15b. NexStar/SynScan Extended</a>
+    <a onclick="tocNav('ch15b-firmware')" class="itoc-sub">Firmware Display</a>
+    <a onclick="tocNav('ch15b-backlash')" class="itoc-sub">Backlash Compensation</a>
+    <a onclick="tocNav('ch15b-limits')" class="itoc-sub">Altitude Limits</a>
+    <a onclick="tocNav('ch15b-guiderate')" class="itoc-sub">Guide Rate</a>
+    <a onclick="tocNav('ch15b-hibernate')" class="itoc-sub">Hibernate</a>
+    <a onclick="tocNav('ch15b-speedcomp')" class="itoc-sub">Speed Compensation</a>
+    <a onclick="tocNav('ch15b-trackrate')" class="itoc-sub">Tracking Rate</a>
+    <a onclick="tocNav('ch15b-api')" class="itoc-sub">API Reference</a>
     <a onclick="tocNav('ch16')">&#128736;&#65039; 16. Troubleshooting</a>
     <a onclick="tocNav('ch17')">&#128187; 17. Hardware</a>
     <a onclick="tocNav('appendix-a')" class="itoc-sub">Appendix A: LX200 Commands</a>
@@ -827,7 +845,14 @@ commands with hexadecimal-encoded positions instead of ASCII text.</p>
   control individual motor axes (Azimuth = axis 16, Altitude = axis 17) at fixed or variable speeds.</li>
   <li><strong>Time/Location sync</strong> &mdash; <code>W</code> command sends lat/lon as raw binary bytes,
   <code>H</code> command sets the date/time on the mount.</li>
+  <li><strong>Backlash compensation</strong> &mdash; App-side per-axis backlash compensation on direction reversal.</li>
+  <li><strong>Altitude safety limits</strong> &mdash; Configurable min/max altitude to prevent dangerous GoTo slews.</li>
+  <li><strong>Autoguide rate</strong> &mdash; Set via NexStar passthrough to motor controllers (0.25x&ndash;1x sidereal).</li>
+  <li><strong>Hibernate / position save</strong> &mdash; Save and restore axis positions across power cycles.</li>
+  <li><strong>Speed compensation (ppm)</strong> &mdash; Correct tracking clock errors in parts per million.</li>
+  <li><strong>Tracking rate control</strong> &mdash; Sidereal, lunar, and solar rates via the <code>T</code> command.</li>
 </ul>
+<p>See <a href="#ch15b">Chapter 15b: NexStar/SynScan Extended Features</a> for full documentation of these features.</p>
 
 <div class="important">The SynScan protocol specifies that software should wait up to <strong>5 seconds</strong>
 for a response on position/goto commands (per the official SynScan Serial Protocol v3.3 documentation).
@@ -5041,6 +5066,156 @@ with the worm rotation phase. See <a href="#ch8-pec" style="color:var(--accent)"
   <tr><td><code>/api/home/find</code></td><td>POST</td><td>&mdash;</td><td>Find home position</td></tr>
 </table>
 <p>The <code>/api/status</code> response now includes an <code>onstep</code> object with all extended state: <code>park_state</code>, <code>tracking_rate</code>, <code>tracking_enabled</code>, <code>mount_pec_status</code>, <code>backlash_ra/dec</code>, <code>horizon_limit</code>, <code>overhead_limit</code>, <code>firmware_name/version/mount_type</code>, <code>focuser_temperature/tcf</code>, <code>rotator_angle/status/derotating</code>, and <code>auxiliary_features</code> (array).</p>
+
+<hr class="divider">
+
+<!-- CHAPTER 15b: NexStar/SynScan Extended Features -->
+<h2 id="ch15b">&#128301; 15b. NexStar/SynScan Extended Features</h2>
+<p>When connected to a Celestron NexStar or Sky-Watcher SynScan mount, TrackWise provides a set of <strong>app-side extended features</strong> that mirror capabilities found in the SynScan App Pro. Unlike OnStep (Chapter 15), which stores these settings in firmware, NexStar/SynScan features are managed entirely within the app since the NexStar hand-controller protocol has no native support for backlash, limits, or hibernate commands.</p>
+
+<div class="note">These panels appear automatically when a NexStar or SynScan mount is connected. They are hidden when connected to OnStep or other protocols. The <strong>Firmware</strong>, <strong>Backlash</strong>, <strong>Limits</strong>, and <strong>Tracking Rate</strong> panels are shared between OnStep and NexStar (both protocols support them, albeit differently).</div>
+
+<!-- 15b.1 Firmware Display -->
+<h3 id="ch15b-firmware">15b.1 Firmware Version Display</h3>
+<p>The firmware panel shows the mount's controller version and model, queried during connection using the NexStar <code>V</code> (version) and <code>m</code> (model) commands.</p>
+
+<table>
+  <tr><th>Field</th><th>Description</th><th>Example</th></tr>
+  <tr><td>Product</td><td>Mount model name from the <code>m</code> command</td><td>Sky-Watcher AZ-GTi GOTO</td></tr>
+  <tr><td>Version</td><td>Hand controller firmware version from <code>V</code></td><td>4.37.07</td></tr>
+  <tr><td>Mount Type</td><td>Always "Alt-Az" (this app targets Alt-Az mounts)</td><td>Alt-Az</td></tr>
+</table>
+
+<p>Two firmware version formats are supported:</p>
+<ul>
+  <li><strong>SynScan v3.38+ / v4.38.06+</strong>: 6 ASCII hex digits (e.g., <code>042507</code> = v4.37.07)</li>
+  <li><strong>Older Celestron/SynScan HC</strong>: 2 binary bytes (major.minor)</li>
+</ul>
+<p>Click <strong>Refresh</strong> to re-query the firmware version at any time.</p>
+
+<!-- 15b.2 Backlash Compensation -->
+<h3 id="ch15b-backlash">15b.2 Backlash Compensation</h3>
+<p>NexStar mounts have mechanical gear backlash (play) that causes a brief dead zone when reversing direction. The app provides <strong>per-axis backlash compensation</strong> that injects a corrective pulse on direction reversal to take up the slack before the visible slew starts.</p>
+
+<h4>How It Works</h4>
+<ol>
+  <li>Set the backlash value (in arcseconds) for each axis: <strong>RA/Azm</strong> and <strong>Dec/Alt</strong>.</li>
+  <li>When you reverse direction on an axis (e.g., slew East then West), the app automatically sends a brief corrective motor pulse in the new direction.</li>
+  <li>The pulse duration is calculated from <code>backlash_arcsec / slew_rate</code>, capped at 2 seconds.</li>
+  <li>After the compensation pulse, the normal slew continues.</li>
+</ol>
+
+<h4>Setting Backlash</h4>
+<p>Go to <strong>Settings &gt; Backlash</strong> and enter the arcsecond values for each axis. Typical values are 10-60 arcseconds depending on your mount's gearing. Set to <strong>0</strong> to disable compensation for an axis.</p>
+
+<div class="tip">To measure your mount's backlash: center a bright star, slew East for a few seconds, then reverse to West and time how long until the star starts moving. Multiply by the approximate slew rate for the backlash in arcseconds.</div>
+
+<div class="important">Unlike OnStep backlash (which is firmware-side using <code>:$BR#</code> / <code>:$BD#</code> commands), NexStar backlash is <strong>app-side only</strong>. The values are stored in the app and applied by injecting motor passthrough commands on direction reversal.</div>
+
+<!-- 15b.3 Altitude Limits -->
+<h3 id="ch15b-limits">15b.3 Altitude Safety Limits</h3>
+<p>Altitude limits prevent the mount from slewing to dangerous positions (below the horizon or too close to zenith where mechanical stops may cause damage).</p>
+
+<h4>Configuration</h4>
+<table>
+  <tr><th>Limit</th><th>Range</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td>Horizon</td><td>-30&deg; to +30&deg;</td><td>-5&deg;</td><td>Minimum altitude: prevents slewing into ground/pier</td></tr>
+  <tr><td>Overhead</td><td>60&deg; to 91&deg;</td><td>90&deg;</td><td>Maximum altitude: prevents hitting mechanical stops near zenith</td></tr>
+</table>
+
+<h4>How Limits Are Enforced</h4>
+<p>When a GoTo Alt/Az command is issued, the app checks the target altitude against the configured limits <em>before</em> sending the command to the mount. If the target is out of bounds, the GoTo is <strong>rejected</strong> with an error message explaining which limit was exceeded.</p>
+
+<div class="note">These limits are <strong>app-side only</strong> and apply to Alt/Az GoTo commands. RA/Dec GoTo commands bypass the altitude check since the mount handles the coordinate conversion internally. For maximum safety, use Alt/Az GoTo mode (the default for Alt-Az mounts).</div>
+
+<!-- 15b.4 Guide Rate -->
+<h3 id="ch15b-guiderate">15b.4 Autoguide Rate</h3>
+<p>The guide rate controls the speed of autoguider corrections. It is set via the NexStar passthrough command to both motor controller axes (AZM = 0x10, ALT = 0x11) using command byte <code>0x46</code>.</p>
+
+<h4>Setting the Guide Rate</h4>
+<p>Go to <strong>Settings &gt; Guide Rate</strong> and enter a rate in arcseconds/second, or use the presets:</p>
+<table>
+  <tr><th>Preset</th><th>Rate</th><th>Percentage of Sidereal</th></tr>
+  <tr><td>0.25x</td><td>3.75 "/s</td><td>25%</td></tr>
+  <tr><td>0.5x (default)</td><td>7.5 "/s</td><td>50%</td></tr>
+  <tr><td>1x</td><td>15.04 "/s</td><td>100%</td></tr>
+</table>
+
+<div class="tip">The default 0.5x sidereal (7.5 "/s) is suitable for most autoguider setups. Use 0.25x for very stable mounts or long focal lengths, and 1x for mounts with significant periodic error.</div>
+
+<h4>Protocol Detail</h4>
+<p>The passthrough command format is: <code>P</code> + chr(2) + chr(axis) + chr(0x46) + chr(rate_pct) + chr(0) + chr(0) + chr(0), where <code>rate_pct</code> is the guide rate as a percentage of sidereal (1-99).</p>
+
+<!-- 15b.5 Hibernate / Position Save -->
+<h3 id="ch15b-hibernate">15b.5 Hibernate / Position Save</h3>
+<p>The hibernate feature saves the current mount axis positions so they can be restored after a power cycle, avoiding a full re-alignment.</p>
+
+<h4>Workflow</h4>
+<ol>
+  <li><strong>Before power-off</strong>: Click <strong>Save Position</strong>. The app reads the current Alt/Az position from the mount and stores it both in memory and on disk (via the config manager).</li>
+  <li><strong>Power off</strong> the mount. Leave the mount mechanically undisturbed.</li>
+  <li><strong>After power-on</strong>: Connect to the mount, then click <strong>Restore Position</strong>. The app issues a GoTo command to the saved Alt/Az position, re-establishing the mount's coordinate reference.</li>
+</ol>
+
+<div class="important">Hibernate only works if the mount is <strong>not physically moved</strong> between power cycles. If the mount was bumped or repositioned, restore will point to the wrong location and you should perform a fresh alignment instead.</div>
+
+<div class="tip">The saved position persists across app restarts via the configuration file (<code>nexstar.hibernate_azm</code> and <code>nexstar.hibernate_alt</code> keys).</div>
+
+<!-- 15b.6 Speed Compensation (ppm) -->
+<h3 id="ch15b-speedcomp">15b.6 Speed Compensation (ppm)</h3>
+<p>Speed compensation corrects for tracking clock frequency errors in the mount's motor controller. If your mount tracks slightly too fast or too slow (visible as consistent drift in one direction), you can apply a parts-per-million correction.</p>
+
+<h4>Usage</h4>
+<table>
+  <tr><th>Value</th><th>Effect</th></tr>
+  <tr><td>+5.0 ppm</td><td>Speeds up tracking by 5 parts per million</td></tr>
+  <tr><td>0.0 ppm</td><td>No correction (default)</td></tr>
+  <tr><td>-3.5 ppm</td><td>Slows down tracking by 3.5 parts per million</td></tr>
+</table>
+
+<p>The correction is applied app-side by adjusting the effective tracking rate. The tracking controller reads the ppm value when computing correction rates sent to the mount via the variable-rate passthrough commands.</p>
+
+<div class="tip">To determine the correct ppm value: track a star for 10+ minutes without corrections, measure the accumulated drift in arcseconds, and compute: <code>ppm = (drift_arcsec / elapsed_sec) / 15.041 * 1e6</code>. A positive result means the mount is too slow (apply +ppm to speed up).</div>
+
+<!-- 15b.7 Tracking Rate Control -->
+<h3 id="ch15b-trackrate">15b.7 Tracking Rate Control</h3>
+<p>NexStar mounts support tracking rate control via the <code>T</code> command. The following modes are available:</p>
+
+<table>
+  <tr><th>Rate</th><th>Command</th><th>Value</th><th>Description</th></tr>
+  <tr><td>Off</td><td><code>T</code> + chr(0)</td><td>0</td><td>Tracking disabled</td></tr>
+  <tr><td>Sidereal</td><td><code>T</code> + chr(1)</td><td>1</td><td>Alt/Az sidereal tracking (default)</td></tr>
+  <tr><td>Lunar</td><td><code>T</code> + chr(2)</td><td>2</td><td>Lunar tracking rate</td></tr>
+  <tr><td>Solar</td><td><code>T</code> + chr(3)</td><td>3</td><td>Solar tracking rate</td></tr>
+</table>
+
+<p>Use the <strong>Enable</strong> / <strong>Disable</strong> buttons in the Tracking Rate panel, or select a specific rate preset. The tracking rate panel is shared with OnStep (both protocols support it).</p>
+
+<!-- 15b.8 Adaptive UI Behavior -->
+<h3>15b.8 Adaptive UI</h3>
+<p>When a NexStar/SynScan mount is connected, the UI automatically adjusts:</p>
+<ul>
+  <li><strong>Shown</strong>: Firmware, Backlash, Limits, Tracking Rate (shared with OnStep), Guide Rate, Hibernate, Speed Compensation (NexStar-only).</li>
+  <li><strong>Hidden</strong>: Extended Focuser, Rotator, Park/Unpark, Mount PEC, Auxiliary Features (OnStep-only features not supported by NexStar).</li>
+</ul>
+<p>Before connecting, all panels are visible so you can explore the full UI.</p>
+
+<!-- 15b.9 API Reference -->
+<h3 id="ch15b-api">15b.9 NexStar API Reference</h3>
+<p>All NexStar-specific endpoints (in addition to the shared backlash/limits/firmware endpoints documented in Chapter 15):</p>
+
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Body</th><th>Description</th></tr>
+  <tr><td><code>/api/mount/guide_rate</code></td><td>POST</td><td><code>{"rate": 7.5}</code></td><td>Set guide rate (arcsec/s)</td></tr>
+  <tr><td><code>/api/mount/guide_rate/get</code></td><td>GET</td><td>&mdash;</td><td>Get current guide rate</td></tr>
+  <tr><td><code>/api/mount/hibernate/save</code></td><td>POST</td><td>&mdash;</td><td>Save current position</td></tr>
+  <tr><td><code>/api/mount/hibernate/restore</code></td><td>POST</td><td>&mdash;</td><td>Restore saved position</td></tr>
+  <tr><td><code>/api/mount/hibernate/status</code></td><td>GET</td><td>&mdash;</td><td>Get hibernate status</td></tr>
+  <tr><td><code>/api/mount/speed_comp</code></td><td>POST</td><td><code>{"ppm": 5.0}</code></td><td>Set speed compensation</td></tr>
+  <tr><td><code>/api/mount/speed_comp/get</code></td><td>GET</td><td>&mdash;</td><td>Get current ppm value</td></tr>
+</table>
+
+<p>The <code>/api/status</code> response includes a <code>nexstar</code> object with: <code>guide_rate</code>, <code>speed_comp_ppm</code>, and <code>hibernate_status</code>.</p>
 
 <hr class="divider">
 

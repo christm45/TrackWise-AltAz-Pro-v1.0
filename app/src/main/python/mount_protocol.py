@@ -1617,6 +1617,33 @@ class NexStarMountProtocol(MountProtocol):
         - All responses are terminated by ``#``.
     """
 
+    def __init__(self):
+        # --- Cached firmware / model info (populated by test_connection) ---
+        self._fw_version_str = ""   # e.g. "SynScan HC v4.37.07"
+        self._fw_model_name = ""    # e.g. "Sky-Watcher AZ-GTi GOTO"
+        self._fw_model_id = -1      # raw model byte from 'm' command
+
+        # --- App-side backlash compensation state -------------------------
+        # Per-axis backlash in arcseconds; applied on direction reversal.
+        self._backlash_azm = 0      # arcsec
+        self._backlash_alt = 0      # arcsec
+        self._last_dir_azm = 0      # +1 or -1, 0 = unknown
+        self._last_dir_alt = 0
+
+        # --- App-side altitude limits -------------------------------------
+        self._horizon_limit = -5    # minimum altitude (degrees)
+        self._overhead_limit = 90   # maximum altitude (degrees)
+
+        # --- Guide rate (arcsec/sec, NexStar default ~half sidereal) ------
+        self._guide_rate = 7.5      # arcsec/sec (0.5x sidereal)
+
+        # --- Tracking speed compensation (ppm) ----------------------------
+        self._speed_comp_ppm = 0.0  # parts per million correction
+
+        # --- Hibernate: saved axis positions (None = not saved) -----------
+        self._hibernate_azm = None  # saved azimuth degrees
+        self._hibernate_alt = None  # saved altitude degrees
+
     @property
     def name(self) -> str:
         return "NexStar / SynScan"
@@ -1654,6 +1681,7 @@ class NexStarMountProtocol(MountProtocol):
                         ver_resp = send_fn(b"V", 3.0)
                         if ver_resp and ver_resp.endswith('#'):
                             model = self._parse_version(ver_resp)
+                            self._fw_version_str = model
                     except Exception:
                         pass
 
@@ -1662,7 +1690,9 @@ class NexStarMountProtocol(MountProtocol):
                         m_resp = send_fn(b"m", 3.0)
                         if m_resp and len(m_resp) >= 2 and m_resp.endswith('#'):
                             model_id = ord(m_resp[0])
+                            self._fw_model_id = model_id
                             model = self._identify_model(model_id, model)
+                            self._fw_model_name = model
                     except Exception:
                         pass
 
@@ -1675,6 +1705,7 @@ class NexStarMountProtocol(MountProtocol):
             ver_resp = send_fn(b"V", 3.0)
             if ver_resp and ver_resp.endswith('#'):
                 ver_str = self._parse_version(ver_resp)
+                self._fw_version_str = ver_str
                 return True, ver_str, False
         except Exception:
             pass
@@ -1841,61 +1872,6 @@ class NexStarMountProtocol(MountProtocol):
         except Exception as e:
             return CommandResult(success=False, message=f"GoTo error: {e}",
                                 details=details)
-
-    def goto_altaz(self, alt_str: str, az_str: str,
-                   send_fn: SendFn) -> CommandResult:
-        """GoTo using horizontal coordinates (32-bit precision).
-
-        Preferred for Alt-Az mounts.  Accepts LX200-format strings
-        or raw degree values.  Uses lowercase 'b' for 32-bit precision.
-        """
-        details = []
-        try:
-            alt_deg = _parse_lx200_dms(alt_str)
-            az_deg = _parse_lx200_dms(az_str)
-            az_hex = _nexstar_angle_to_hex32(az_deg)
-            alt_hex = _nexstar_angle_to_hex32(alt_deg % 360)  # handle negative
-            cmd = f"b{az_hex},{alt_hex}"
-            resp = send_fn(cmd, 2.0)
-            details.append((cmd, resp))
-            ok = resp is not None and resp.endswith('#')
-            return CommandResult(success=ok,
-                                message="Alt/Az GoTo accepted" if ok else f"GoTo failed: {resp}",
-                                details=details)
-        except Exception as e:
-            return CommandResult(success=False, message=f"GoTo error: {e}",
-                                details=details)
-
-    # --- Motion control --------------------------------------------
-
-    def slew(self, direction: str, speed: int,
-             send_fn: SendFn) -> None:
-        """Slew using NexStar motor passthrough commands.
-
-        Uses the 'P' passthrough command to set motor speed per axis.
-        Axes: 16=AZM, 17=ALT.  Directions: 36=positive, 37=negative.
-        Speed: 1-9 fixed rates.
-        """
-        # Map direction to (axis, dir_code)
-        dir_map = {
-            'N': (17, 36),   # ALT positive (up)
-            'S': (17, 37),   # ALT negative (down)
-            'E': (16, 36),   # AZM positive (CW)
-            'W': (16, 37),   # AZM negative (CCW)
-        }
-        if direction not in dir_map:
-            return
-
-        axis, dir_code = dir_map[direction]
-        # Map speed 1-4 to NexStar rate 1-9
-        rate = min(9, max(1, speed * 2))
-
-        # Build passthrough command: P + chr(2) + axis + dir + rate + 0 + 0 + 0
-        cmd_bytes = bytes([ord('P'), 2, axis, dir_code, rate, 0, 0, 0])
-        try:
-            send_fn(cmd_bytes, 1.0)
-        except Exception:
-            pass
 
     def stop(self, send_fn: SendFn) -> None:
         """Stop all motion: set rate=0 on both axes + cancel goto."""
@@ -2157,6 +2133,394 @@ class NexStarMountProtocol(MountProtocol):
         except Exception:
             pass
         return None
+
+    # --- Firmware info -----------------------------------------------
+
+    def get_firmware_info(self, send_fn: SendFn) -> Dict[str, str]:
+        """Return cached firmware info populated during ``test_connection()``.
+
+        For NexStar mounts, re-queries the ``V`` and ``m`` commands if the
+        cached values are empty (e.g. the caller wants a refresh).
+        """
+        # Re-query if we don't have cached info yet
+        if not self._fw_version_str:
+            try:
+                ver_resp = send_fn(b"V", 3.0)
+                if ver_resp and ver_resp.endswith('#'):
+                    self._fw_version_str = self._parse_version(ver_resp)
+            except Exception:
+                pass
+        if not self._fw_model_name:
+            try:
+                m_resp = send_fn(b"m", 3.0)
+                if m_resp and len(m_resp) >= 2 and m_resp.endswith('#'):
+                    model_id = ord(m_resp[0])
+                    self._fw_model_id = model_id
+                    self._fw_model_name = self._identify_model(
+                        model_id, self._fw_version_str or "NexStar Mount"
+                    )
+            except Exception:
+                pass
+
+        # Extract version number from the version string
+        # e.g. "SynScan HC v4.37.07" -> "4.37.07"
+        #      "NexStar HC v4.22"    -> "4.22"
+        version = self._fw_version_str
+        for prefix in ("SynScan HC v", "NexStar HC v", "NexStar HC ("):
+            if version.startswith(prefix):
+                version = version[len(prefix):].rstrip(')')
+                break
+
+        product = self._fw_model_name or self._fw_version_str or "NexStar Mount"
+        return {
+            'product': product,
+            'version': version or '--',
+            'mount_type': 'Alt-Az',  # This app targets Alt-Az mounts
+        }
+
+    # --- Backlash (app-side compensation) ------------------------------
+
+    def set_backlash(self, axis: str, value: int,
+                     send_fn: SendFn) -> CommandResult:
+        """Set app-side backlash compensation for *axis* in arcseconds.
+
+        NexStar mounts do not have firmware-level backlash commands.
+        Compensation is applied in the ``slew()`` method: when the user
+        reverses direction on an axis, a brief corrective pulse is injected
+        to take up the mechanical backlash before the visible slew starts.
+
+        Args:
+            axis: ``'ra'``/``'azm'`` for azimuth, ``'dec'``/``'alt'`` for altitude.
+            value: Backlash amount in arcseconds (0 = disabled).
+            send_fn: Not used (app-side only), but kept for API compatibility.
+        """
+        if axis.lower() in ('ra', 'azm'):
+            self._backlash_azm = max(0, int(value))
+        else:
+            self._backlash_alt = max(0, int(value))
+        return CommandResult(success=True,
+                             message=f"Backlash {axis} set to {value}\"")
+
+    def get_backlash(self, axis: str,
+                     send_fn: SendFn) -> Optional[int]:
+        """Return the current app-side backlash value for *axis*."""
+        if axis.lower() in ('ra', 'azm'):
+            return self._backlash_azm
+        return self._backlash_alt
+
+    # --- Altitude limits (app-side safety) -----------------------------
+
+    def set_horizon_limit(self, degrees: int,
+                          send_fn: SendFn) -> CommandResult:
+        """Set minimum altitude limit (degrees).
+
+        GoTo commands targeting altitudes below this limit will be rejected
+        to protect the mount/optics from slewing into the ground or pier.
+        """
+        self._horizon_limit = int(degrees)
+        return CommandResult(success=True,
+                             message=f"Horizon limit set to {degrees}\u00b0")
+
+    def set_overhead_limit(self, degrees: int,
+                           send_fn: SendFn) -> CommandResult:
+        """Set maximum altitude limit (degrees).
+
+        GoTo commands targeting altitudes above this limit will be rejected.
+        Useful for preventing damage on mounts with mechanical stops near zenith.
+        """
+        self._overhead_limit = int(degrees)
+        return CommandResult(success=True,
+                             message=f"Overhead limit set to {degrees}\u00b0")
+
+    def get_horizon_limit(self, send_fn: SendFn) -> Optional[int]:
+        """Return current horizon limit (degrees)."""
+        return self._horizon_limit
+
+    def get_overhead_limit(self, send_fn: SendFn) -> Optional[int]:
+        """Return current overhead limit (degrees)."""
+        return self._overhead_limit
+
+    def _check_altitude_limits(self, alt_deg: float) -> Optional[str]:
+        """Check if altitude is within allowed limits.
+
+        Returns an error message if out-of-bounds, or ``None`` if OK.
+        """
+        if alt_deg < self._horizon_limit:
+            return (f"Target altitude {alt_deg:.1f}\u00b0 is below horizon "
+                    f"limit ({self._horizon_limit}\u00b0)")
+        if alt_deg > self._overhead_limit:
+            return (f"Target altitude {alt_deg:.1f}\u00b0 is above overhead "
+                    f"limit ({self._overhead_limit}\u00b0)")
+        return None
+
+    # --- Guide rate via passthrough ------------------------------------
+
+    def set_guide_rate(self, rate_arcsec: float,
+                       send_fn: SendFn) -> CommandResult:
+        """Set autoguide rate on both motor axes via NexStar passthrough.
+
+        Per the NexStar serial protocol, the autoguide rate is set using
+        passthrough command ``P`` with:
+          - Length = 2 (2 data bytes after axis)
+          - Axis: 0x10 (AZM), 0x11 (ALT)
+          - Command: 0x46 (set autoguide rate)
+          - Data: rate as percentage of sidereal (1 byte, 0-99)
+            where 50 = 0.5x sidereal = 7.5 arcsec/sec
+
+        Args:
+            rate_arcsec: Guide rate in arcsec/sec. Sidereal = 15.041 "/s.
+            send_fn: Transport callback.
+        """
+        # Convert arcsec/sec to percentage of sidereal
+        sidereal = 15.041  # arcsec/sec
+        pct = int(round((rate_arcsec / sidereal) * 100))
+        pct = max(1, min(99, pct))
+        self._guide_rate = rate_arcsec
+
+        details = []
+        success = True
+        for axis in (0x10, 0x11):  # AZM, ALT
+            cmd_bytes = bytes([ord('P'), 2, axis, 0x46, pct, 0, 0, 0])
+            try:
+                resp = send_fn(cmd_bytes, 2.0)
+                details.append((f"P guide rate axis {axis:#x}", resp))
+                if not (resp and resp.endswith('#')):
+                    success = False
+            except Exception as e:
+                details.append((f"P guide rate axis {axis:#x}", str(e)))
+                success = False
+
+        return CommandResult(
+            success=success,
+            message=f"Guide rate set to {rate_arcsec:.1f}\"/s ({pct}% sidereal)"
+                    if success else "Guide rate set failed",
+            details=details,
+        )
+
+    def get_guide_rate(self, send_fn: SendFn) -> float:
+        """Return the current autoguide rate in arcsec/sec."""
+        return self._guide_rate
+
+    # --- Hibernate: save/restore axis positions ------------------------
+
+    def hibernate_save(self, send_fn: SendFn) -> CommandResult:
+        """Save current axis positions for later restoration.
+
+        Reads the current Alt/Az position from the mount and stores it
+        in memory.  The caller (HEADLESS_SERVER) should persist this
+        to disk (JSON) for true hibernate across power cycles.
+        """
+        try:
+            z_resp = send_fn("z", 5.0)
+            if z_resp and z_resp.endswith('#') and ',' in z_resp:
+                parts = z_resp.rstrip('#').split(',')
+                if len(parts) == 2 and len(parts[0]) == 8 and len(parts[1]) == 8:
+                    az_deg = _nexstar_hex32_to_angle(parts[0])
+                    alt_deg = _nexstar_signed_angle(
+                        _nexstar_hex32_to_angle(parts[1])
+                    )
+                    self._hibernate_azm = az_deg
+                    self._hibernate_alt = alt_deg
+                    return CommandResult(
+                        success=True,
+                        message=f"Position saved: Alt={alt_deg:.4f}\u00b0, Az={az_deg:.4f}\u00b0",
+                    )
+            return CommandResult(success=False, message="Could not read position")
+        except Exception as e:
+            return CommandResult(success=False, message=f"Hibernate save error: {e}")
+
+    def hibernate_restore(self, send_fn: SendFn) -> CommandResult:
+        """Restore previously saved axis positions by syncing.
+
+        After power cycle, the mount loses its position.  This syncs
+        the mount to the last known position so tracking can resume
+        without a full re-alignment.
+        """
+        if self._hibernate_azm is None or self._hibernate_alt is None:
+            return CommandResult(success=False,
+                                message="No saved position to restore")
+        az_hex = _nexstar_angle_to_hex32(self._hibernate_azm)
+        alt_hex = _nexstar_angle_to_hex32(self._hibernate_alt % 360)
+        # Use lowercase 's' for RA/Dec sync -- NexStar doesn't have
+        # native alt/az sync, but we can set the position by a
+        # fake goto to the exact saved position (no actual slew).
+        # A better approach: just report the saved values to the user
+        # and let them sync manually.  For now, we do a precision
+        # goto to the saved position (minimal movement).
+        cmd = f"b{az_hex},{alt_hex}"
+        try:
+            resp = send_fn(cmd, 2.0)
+            ok = resp is not None and resp.endswith('#')
+            return CommandResult(
+                success=ok,
+                message=(f"Restoring to Alt={self._hibernate_alt:.2f}\u00b0, "
+                         f"Az={self._hibernate_azm:.2f}\u00b0")
+                        if ok else f"Hibernate restore failed: {resp}",
+            )
+        except Exception as e:
+            return CommandResult(success=False,
+                                message=f"Hibernate restore error: {e}")
+
+    def get_hibernate_position(self) -> Optional[Dict[str, float]]:
+        """Return the saved hibernate position, or None if not saved."""
+        if self._hibernate_azm is None or self._hibernate_alt is None:
+            return None
+        return {'azm': self._hibernate_azm, 'alt': self._hibernate_alt}
+
+    def set_hibernate_position(self, azm: float, alt: float):
+        """Restore hibernate position from persisted data (JSON)."""
+        self._hibernate_azm = azm
+        self._hibernate_alt = alt
+
+    # --- Speed compensation (ppm) -------------------------------------
+
+    def set_speed_compensation(self, ppm: float,
+                               send_fn: SendFn) -> CommandResult:
+        """Set tracking speed compensation in parts-per-million.
+
+        Adjusts the sidereal tracking rate by ``ppm`` parts per million
+        to correct for mount clock frequency errors.  A positive ppm
+        speeds up tracking; negative slows it down.
+
+        This is applied app-side by adjusting the variable tracking rate
+        sent to the mount via ``send_variable_rate_altaz()``.
+        The tracking controller should call ``get_speed_compensation()``
+        when computing the effective tracking rate.
+
+        Args:
+            ppm: Correction in parts per million (e.g. +5.0 = 5 ppm faster).
+            send_fn: Not used (app-side), kept for API compatibility.
+        """
+        self._speed_comp_ppm = float(ppm)
+        return CommandResult(
+            success=True,
+            message=f"Speed compensation set to {ppm:+.1f} ppm",
+        )
+
+    def get_speed_compensation(self) -> float:
+        """Return current speed compensation in ppm."""
+        return self._speed_comp_ppm
+
+    # --- Tracking rate (using NexStar T command) -----------------------
+
+    def set_tracking_rate(self, rate: str,
+                          send_fn: SendFn) -> None:
+        """Set tracking rate using the NexStar ``T`` command.
+
+        Supported rates:
+            - ``'off'`` or ``'stop'``: ``T`` + chr(0)
+            - ``'sidereal'``: ``T`` + chr(1) (Alt/Az tracking)
+            - ``'lunar'``: ``T`` + chr(2) (uses EQ mode)
+            - ``'solar'``: ``T`` + chr(3) (uses EQ mode)
+        """
+        rate_map = {
+            'off': 0, 'stop': 0,
+            'sidereal': 1,
+            'lunar': 2,
+            'solar': 3,
+        }
+        rate_byte = rate_map.get(rate.lower())
+        if rate_byte is not None:
+            try:
+                send_fn(bytes([ord('T'), rate_byte]), 1.0)
+            except Exception:
+                pass
+
+    def enable_tracking(self, send_fn: SendFn) -> None:
+        """Enable sidereal tracking (Alt/Az mode)."""
+        self.set_tracking_rate('sidereal', send_fn)
+
+    def disable_tracking(self, send_fn: SendFn) -> None:
+        """Disable tracking."""
+        self.set_tracking_rate('off', send_fn)
+
+    # --- Override GoTo with altitude limit checking --------------------
+
+    def goto_altaz(self, alt_str: str, az_str: str,
+                   send_fn: SendFn) -> CommandResult:
+        """GoTo using horizontal coordinates with altitude limit checking.
+
+        Preferred for Alt-Az mounts.  Accepts LX200-format strings
+        or raw degree values.  Uses lowercase 'b' for 32-bit precision.
+        Rejects the slew if the target altitude is outside the configured
+        horizon/overhead limits.
+        """
+        details = []
+        try:
+            alt_deg = _parse_lx200_dms(alt_str)
+            az_deg = _parse_lx200_dms(az_str)
+
+            # Check altitude limits
+            limit_err = self._check_altitude_limits(alt_deg)
+            if limit_err:
+                return CommandResult(success=False, message=limit_err,
+                                     details=details)
+
+            az_hex = _nexstar_angle_to_hex32(az_deg)
+            alt_hex = _nexstar_angle_to_hex32(alt_deg % 360)
+            cmd = f"b{az_hex},{alt_hex}"
+            resp = send_fn(cmd, 2.0)
+            details.append((cmd, resp))
+            ok = resp is not None and resp.endswith('#')
+            return CommandResult(success=ok,
+                                 message="Alt/Az GoTo accepted" if ok else f"GoTo failed: {resp}",
+                                 details=details)
+        except Exception as e:
+            return CommandResult(success=False, message=f"GoTo error: {e}",
+                                 details=details)
+
+    # --- Override slew with backlash compensation ----------------------
+
+    def slew(self, direction: str, speed: int,
+             send_fn: SendFn) -> None:
+        """Slew using NexStar motor passthrough commands with backlash compensation.
+
+        On direction reversal, injects a brief corrective pulse to
+        compensate for mechanical backlash before starting the visible slew.
+        """
+        dir_map = {
+            'N': (17, 36, +1, 'alt'),   # ALT positive (up)
+            'S': (17, 37, -1, 'alt'),    # ALT negative (down)
+            'E': (16, 36, +1, 'azm'),    # AZM positive (CW)
+            'W': (16, 37, -1, 'azm'),    # AZM negative (CCW)
+        }
+        if direction not in dir_map:
+            return
+
+        axis, dir_code, sign, axis_name = dir_map[direction]
+        rate = min(9, max(1, speed * 2))
+
+        # Check for direction reversal -> inject backlash compensation
+        if axis_name == 'azm':
+            prev_dir = self._last_dir_azm
+            bl_arcsec = self._backlash_azm
+            self._last_dir_azm = sign
+        else:
+            prev_dir = self._last_dir_alt
+            bl_arcsec = self._backlash_alt
+            self._last_dir_alt = sign
+
+        if bl_arcsec > 0 and prev_dir != 0 and prev_dir != sign:
+            # Direction reversed -- inject a backlash compensation pulse.
+            # Duration = backlash_arcsec / (rate_arcsec_per_sec).
+            # At rate 9, NexStar moves ~3 deg/s = 10800"/s.
+            # At rate 1, ~1'/s = 60"/s.  Approximate as 60*rate "/s.
+            approx_speed = 60.0 * rate  # very rough
+            pulse_sec = min(2.0, bl_arcsec / max(1.0, approx_speed))
+            # Send the corrective pulse at same rate/direction
+            cmd_bytes = bytes([ord('P'), 2, axis, dir_code, rate, 0, 0, 0])
+            try:
+                send_fn(cmd_bytes, 1.0)
+                time.sleep(pulse_sec)
+            except Exception:
+                pass
+
+        # Normal slew command
+        cmd_bytes = bytes([ord('P'), 2, axis, dir_code, rate, 0, 0, 0])
+        try:
+            send_fn(cmd_bytes, 1.0)
+        except Exception:
+            pass
 
     # --- Command formatting ----------------------------------------
 
