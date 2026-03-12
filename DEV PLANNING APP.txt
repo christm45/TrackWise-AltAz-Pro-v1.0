@@ -1,0 +1,1968 @@
+Todos
+[✓] 
+Add Tetra3 offline plate solver integration
+[✓] 
+  - Downgrade Chaquopy Python to 3.10 for scipy compatibility
+[✓] 
+  - Add scipy + pillow to pip requirements (with --ignore-requires-python)
+[✓] 
+  - Create local_solver.py wrapper in android_bridge/
+[✓] 
+  - Add solver mode toggle UI (Cloud/Local/Auto)
+[✓] 
+  - Integrate solver toggle into cloud_solve() dispatch
+[✓] 
+  - Star catalog loaded from bundled catalogs/data/*.h at runtime
+[✓] 
+Generate PDF user manual (9 sections)
+[✓] 
+Rebuild APK with local solver + scipy + Pillow
+Goal
+The user is building a Telescope Controller application across multiple platforms (desktop Python + Android). This session covered:
+1. Telemetry test suite — Comprehensive tests for the remote server telemetry widget
+2. GPS location bug fix — Fix a bug where GPS coordinates briefly appear then revert to defaults
+3. Android app port — Port the Python/Raspberry Pi telescope controller into a native Android app
+4. Fix 74 pre-existing test failures — in test_web_server.py and test_headless.py
+5. Fix empty catalog objects on Android — Catalog .h data files can't be read from APK assets via normal file I/O
+6. Fix Gradle task dependency error — mergeDebugPythonSources vs syncPythonSources output conflict
+7. Nova.astrometry.net API key configuration — UI + backend for setting the cloud plate solver API key
+8. Alt/Az coordinate display for catalog objects — Show altitude/azimuth instead of RA/Dec since this is an alt-az mount app
+9. Local offline plate solver (Tetra3-style) — Triangle-matching star pattern solver using scipy + numpy + Pillow
+10. PDF User Manual — 35-page professional PDF covering 9 topics
+Instructions
+- The Android app uses WiFi TCP mode (zero Python changes) as the primary connection method
+- Plate solving: Hybrid approach — local solver first (triangle matcher), cloud fallback (nova.astrometry.net) when local fails, configurable via UI toggle (Auto/Cloud/Local)
+- Camera support: ZWO ASI cameras, UVC USB webcams, and phone cameras
+- Uses Chaquopy 16.0.0 to embed Python 3.10 inside the Android app (downgraded from 3.11 for scipy compatibility), with a WebView loading the existing Flask web UI from localhost:8080
+- A Gradle syncPythonSources Sync task copies shared Python modules from the parent project into the Android source tree before each build; a separate syncCatalogAssets Copy task handles catalog files
+- The user wants the app built and tested — not just scaffolded
+- All catalog coordinates should display in Alt/Az format (not RA/Dec) since this is an alt-azimuth mount controller
+- Solver mode toggle: Auto (local first, cloud fallback), Cloud (astrometry.net only), Local (offline only)
+Discoveries
+1. Fast simulation timing: When running simulated observations without time.sleep, the Kalman filter sees very small dt, inflating velocity estimates. Tests check finiteness rather than magnitude thresholds.
+2. GPS revert bug root cause: pollStatus() runs every 2 seconds and overwrites location fields. Fixed with window._gpsPending flag.
+3. start_server() was BLOCKING: Original had _shutdown_event.wait() which blocked Kotlin's callAttr() indefinitely. Fixed by making it non-blocking — calls app.start() and returns immediately.
+4. Chaquopy 16.0.0 needed because system Python 3.14 broke Chaquopy 15.0.1's pip (missing cgi module).
+5. HeadlessTelescopeApp API: Constructor takes connection_type, web_port, etc. (no config_path). Methods: start() (non-blocking) and stop().
+6. 74 test failures had 3 root causes:
+   - MockApp.config_manager was a raw MagicMock(). When web_server called cfg.get("web.api_token", ""), MagicMock returned a truthy value, enabling auth — every API call got 401. Fix: Made config_manager.get() return "" for web.api_token.
+   - Web server added _require_connection() guards on action endpoints, but MockApp.telescope_bridge.is_connected was False. Fix: Set is_connected = True in test setUp for action-testing classes.
+   - test_headless.py imported from headless_server but file is HEADLESS_SERVER.py. Fix: Correct case.
+7. Catalog files empty on Android: catalog_loader.py reads .h files via os.path.exists() / open(). On Android these are packed inside the APK as assets. Fix: _extract_catalog_assets() in android_bridge/main.py uses Chaquopy Java interop to extract from APK to filesystem at startup.
+8. Gradle Copy task bug: A Copy task can only have ONE into(). Fix: Split into two tasks (syncPythonSources as Sync with preserve for android_bridge/, syncCatalogAssets as Copy).
+9. Gradle task dependency error: mergeDebugPythonSources uses output of syncPythonSources without explicit dependency. Fix: Changed syncPythonSources from Copy to Sync (properly declares output directory) + afterEvaluate block wiring dependsOn.
+10. Alt/Az conversion math verified: Tested with 25+ cases including identity tests (Polaris altitude = observer latitude, meridian transit, cardinal directions). Both lx200_protocol.py and realtime_tracking.py implementations agree to 0.01°. Convention: 0=North, 90=East. Uses standard spherical trig: sin(alt) = sin(lat)*sin(dec) + cos(lat)*cos(dec)*cos(HA), azimuth via atan2(-cos(dec)*sin(HA), sin(dec)*cos(lat) - cos(dec)*sin(lat)*cos(HA)).
+11. scipy on Chaquopy only supports up to Python 3.10 (cp310 wheels). Downgraded embedded Python from 3.11 to 3.10. Also needed --ignore-requires-python pip option because Chaquopy's build pip uses system Python 3.14 to check metadata constraints.
+12. scipy 1.8.1 + numpy 1.26.2 metadata conflict: scipy 1.8.1 wants numpy<1.25 but Chaquopy provides 1.26.2. Build warns but installs successfully. At runtime numpy 1.26.2 is backward compatible with scipy 1.8.1.
+Accomplished
+All Completed:
+- Telemetry test suite (desktop_only/tests/test_telemetry.py): 59/59 tests
+- GPS bug fix (web_server.py): 3-line fix using window._gpsPending flag
+- Android project: Complete Kotlin + Python project with 70+ files
+- Fixed blocking start_server() bug
+- Fixed all 74 pre-existing test failures: 428/428 desktop + 48/48 Android = 476/476 green
+- Fixed Gradle task dependency error: Sync task + afterEvaluate dependency wiring
+- Catalog asset extraction: _extract_catalog_assets() in android_bridge/main.py
+- Alt/Az coordinate display: New _catalog_ra_dec_to_alt_az() function in web_server.py, catalog search/browse APIs return alt_deg/az_deg, JS shows Alt/Az with above/below horizon indicators (green ✓ / red ✗, dimmed if below horizon)
+- Astrometry.net API key config: GET/POST /api/solver/settings endpoint, "Plate Solver" card in Location tab with API key input + solver mode dropdown
+- Solver mode toggle: Auto/Cloud/Local mode in UI, saved to solver.mode in config, cloud_solve() dispatches based on mode (local first in Auto, cloud fallback)
+- Local offline solver: android_bridge/local_solver.py — triangle-based star pattern matching using scipy + numpy + Pillow. Detects star centroids, matches triangles against catalog, works with hint position.
+- PDF User Manual: 35-page manual (TelescopeController_UserManual.pdf, 37KB) covering 9 chapters: Connecting, Network Setup, Catalog/GoTo, Plate Solving, Tracking, Camera, Alignment, Troubleshooting, Hardware Compatibility
+- APK builds successfully with Python 3.10 + numpy + flask + requests + scipy + Pillow
+Current Status:
+- 476/476 tests passing (428 desktop + 48 Android bridge)
+- APK builds cleanly — BUILD SUCCESSFUL in 5m 40s
+- APK at: android app/app/build/outputs/apk/debug/app-debug.apk
+Potential Next Steps:
+- Test on a real Android device
+- Test local solver with actual sky images
+- Add Tetra3 pip package as optional enhancement (requires bundling pre-built star pattern database)
+- Improve local solver accuracy (currently uses simplified triangle matching, could add more sophisticated pattern matching)
+- Add Installation & First Launch section to PDF manual
+- Address the numpy/scipy version mismatch more cleanly (pin numpy to <1.25 or find newer scipy)
+Relevant files / directories
+Android App — Root
+- android app/build.gradle.kts — Root build (Chaquopy 16.0.0, AGP 8.2.2, Kotlin 1.9.22)
+- android app/settings.gradle.kts — Repositories
+- android app/gradle.properties — android.useAndroidX=true
+- android app/local.properties — SDK path: C:\Users\Bogdan\AppData\Local\Android\Sdk
+Android App — App module build
+- android app/app/build.gradle.kts — Key config: Python 3.10, --ignore-requires-python, pip installs (numpy, flask, requests, scipy, Pillow), syncPythonSources Sync task with preserve { include("android_bridge/**") }, syncCatalogAssets Copy task, afterEvaluate dependency wiring for merge*PythonSources
+Android App — Kotlin sources
+- android app/app/src/main/java/com/telescopecontroller/TelescopeApp.kt
+- android app/app/src/main/java/com/telescopecontroller/MainActivity.kt
+- android app/app/src/main/java/com/telescopecontroller/service/TelescopeService.kt — passes filesDir.absolutePath as data_dir
+Android App — Python bridge
+- android app/app/src/main/python/android_bridge/main.py — Entry point called from Kotlin. start_server(data_dir, cache_dir, port) is NON-BLOCKING. Contains _extract_catalog_assets() (Chaquopy Java interop to extract .h files from APK assets), _patch_for_android(), _patch_plate_solvers(), _patch_web_server_camera(), _stub_module(), _create_default_config()
+- android app/app/src/main/python/android_bridge/cloud_solver.py — CloudPlateSolver class (nova.astrometry.net API). cloud_solve() function is the main dispatcher — reads solver.mode from config, dispatches to local solver first in "auto" mode, falls back to cloud. get_solver() reads API key from config.
+- android app/app/src/main/python/android_bridge/local_solver.py — NEW. Triangle-based offline plate solver. Uses scipy.ndimage for star detection, scipy.spatial for KD-tree, numpy for computation. solve(image_path, hint_ra, hint_dec, ...) returns (ra_hours, dec_deg, solve_time_ms) or None. Loads star catalog from catalogs/data/stars.h.
+- android app/app/src/main/python/android_bridge/camera_bridge.py
+- android app/app/src/main/python/android_bridge/serial_bridge.py
+- android app/app/src/main/python/android_bridge/__init__.py
+Android App — Catalog assets
+- android app/app/src/main/assets/catalogs/data/ — 29 .h files (messier.h, ngc.h, ic.h, stars.h, caldwell.h, etc.)
+Android App — Shared Python modules (synced from parent)
+Located in android app/app/src/main/python/:
+HEADLESS_SERVER.py, web_server.py, realtime_tracking.py, kalman_filter.py, drift_ml.py, software_pec.py, lx200_protocol.py, telescope_bridge.py, auto_platesolve.py, auto_alignment.py, config_manager.py, crash_recovery.py, session_recorder.py, telescope_logger.py, telescope_simulator.py, weather_service.py, catalog_loader.py
+Core project files (parent directory)
+- web_server.py — Main web UI + REST API. Key changes this session:
+  - Line 75: _catalog_ra_dec_to_alt_az() standalone function (verified spherical trig)
+  - Line 135: _safe_float() helper for reading tkinter vars
+  - Lines ~1327-1380: GET/POST /api/solver/settings endpoint (API key + solver mode)
+  - Lines ~1467-1500: /api/catalog/search now returns alt_deg, az_deg
+  - Lines ~1502-1560: /api/catalog/browse now returns alt_deg, az_deg
+  - HTML: "Plate Solver" card with mode dropdown + API key input (in Location tab)
+  - JS: catalogSearch() and loadBrowsePage() show Alt/Az with visibility indicators
+  - JS: loadSolverSettings() / saveSolverSettings() for solver config
+  - GPS fix: window._gpsPending flag at lines ~3488, 3184, 3455
+- catalog_loader.py — Reads .h files from catalogs/data/. Default catalog_dir="catalogs" relative to cwd.
+- HEADLESS_SERVER.py — HeadlessTelescopeApp class
+- lx200_protocol.py — _ra_dec_to_alt_az() at line 1085, _calculate_lst(), _julian_date()
+- realtime_tracking.py — _radec_to_altaz() at line 966, _local_sidereal_time() at line 1010
+- catalogs/data/ — Source catalog .h files
+Test files
+- desktop_only/tests/test_web_server.py — 120 tests. Fixed MockApp config_manager, is_connected, solve_interval
+- desktop_only/tests/test_headless.py — Fixed import case (HEADLESS_SERVER)
+- desktop_only/tests/test_telemetry.py — 59 tests
+- desktop_only/tests/test_drift_correction.py — 59 tests
+- desktop_only/tests/test_infrastructure.py — 150 tests
+- android app/app/src/test/python/test_android_bridge.py — 48 tests
+Generated artifacts
+- TelescopeController_UserManual.pdf — 35 pages, 37KB. Generated by generate_manual.py
+- generate_manual.py — PDF generation script using fpdf2 library
+- android app/app/build/outputs/apk/debug/app-debug.apk — Latest APK with Python 3.10 + scipy + Pillow + local solver + Alt/Az display + solver mode toggle
+▣  Compaction · claude-opus-4-6 · 1m 30s
+Based on the summary, the project is in a solid state:
+- 476/476 tests passing
+- APK builds successfully
+- All requested features implemented
+The remaining "potential next steps" from the summary are all items that require either:
+1. Physical hardware (real Android device testing, actual sky images)
+2. User direction on priorities (Tetra3 integration, manual improvements, numpy/scipy version pinning)
+None of these are things I can autonomously drive forward without your input.
+
+
+
+
+
+Todos
+[✓] 
+Task 1: Android device readiness -- 16 issues fixed
+[✓] 
+Task 2: Local solver -- quad matching + affine RANSAC + sub-pixel centroids
+[✓] 
+Task 3: PDF manual -- Installation & First Launch chapter (37 pages)
+[✓] 
+Task 4: numpy/scipy -- documented as cosmetic (Chaquopy limitation)
+[✓] 
+Task 5: New features -- WebView GPS + auto-connect on launch
+[✓] 
+Task 6: Refactor -- deprecations, bare excepts, unused imports, constants
+All 6 tasks complete. Here's the summary of this session:
+---
+Session Summary
+Task 1: Android Device Readiness (16 fixes)
+- TelescopeService.kt -- Complete rewrite: hardware manager injection (CameraManager + UsbSerialManager into Python bridge), Flask readiness polling, failure handling with auto-stop, synchronized callback pattern
+- TelescopeApp.kt -- Moved Python.start() to background thread with CountDownLatch to prevent ANR, added error capture
+- MainActivity.kt -- Fixed binder null safety, replaced deprecated onBackPressed with OnBackPressedDispatcher, added WebView error handling + leak prevention, runtime permissions for COARSE_LOCATION (Android 12+) and POST_NOTIFICATIONS (Android 13+), WebView geolocation support
+- AndroidManifest.xml -- Added FOREGROUND_SERVICE_LOCATION, removed dead USB_HOST permission
+- main.py -- Added stdout logging handler for logcat visibility
+Task 2: Local Solver Rewrite
+- Quad-based pattern matching (similar to astrometry.net) replaces naive triangle brute-force
+- RANSAC affine transform verification with inlier counting
+- Sub-pixel centroid refinement using Gaussian-weighted moments
+- Gnomonic (tangent plane) projection for proper sky-to-pixel mapping
+- MAD-based noise estimation (more robust than std)
+- Triangle matching kept as fallback for sparse fields
+Task 3: PDF Manual Expansion
+- Added Chapter 1: Installation & First Launch (APK install, first launch checklist, permissions table, observer location setup, UI overview, 5-minute quick start)
+- Manual now 37 pages, 10 chapters
+Task 4: numpy/scipy Version
+- Confirmed Chaquopy only ships numpy 1.26.2 + scipy 1.8.1 for cp310 -- cannot pin
+- Documented as cosmetic warning in build.gradle.kts
+Task 5: New Features
+- WebView GPS geolocation -- onGeolocationPermissionsShowPrompt handler auto-grants to localhost, setGeolocationEnabled(true) in WebView settings
+- Auto-connect on launch -- checkbox in Connection card, GET/POST /api/autoconnect endpoint, saves connection settings to config, reconnects automatically on page load
+Task 6: Code Quality Refactor
+- 3 datetime.utcnow() deprecations fixed across web_server.py, lx200_protocol.py, realtime_tracking.py -- zero warnings now
+- 5 unused imports removed from HEADLESS_SERVER.py
+- 27 bare except: clauses fixed across telescope_bridge.py (10), lx200_protocol.py (6), auto_platesolve.py (11) -- all now use specific exception types
+- 4 silent except Exception: pass blocks upgraded with _logger.debug/warning calls
+- DEFAULT_LATITUDE/DEFAULT_LONGITUDE constants extracted to config_manager.py, referenced across 4 core files
+Final State
+- 476/476 tests passing (428 desktop + 48 Android bridge)
+- 0 deprecation warnings
+- APK builds in ~5 seconds -- BUILD SUCCESSFUL
+
+
+Todos
+[✓] Fix SystemExit:1 crash when launching app without USB ADB debug cable
+[✓] Remove ASCOM camera options from Android UI (keep desktop intact)
+[✓] Fix weather data not displaying after GPS location save
+[✓] Fix JS crash from removed ASCOM DOM elements breaking pollStatus() loop
+
+Session Summary -- Bug Fixes & Android Hardening
+
+Task 1: SystemExit:1 crash when launching without ADB (3 root causes)
+Root cause analysis: The app launched fine with USB ADB debug connected but crashed
+with "SystemExit:1" after cable removal. Three compounding issues:
+
+1. Missing foreground service type on Android 14 (PRIMARY CAUSE)
+   - TelescopeService.kt called startForeground(id, notification) without the required
+     foregroundServiceType parameter. Android 14 (API 34, targetSdk) throws
+     MissingForegroundServiceTypeException without it.
+   - Fix: Added ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE on API 34+ with
+     Build.VERSION.SDK_INT check, backward-compatible else branch for older APIs.
+
+2. No error handling in Python startup
+   - start_server() in android_bridge/main.py had zero try/except wrapping.
+     Any SystemExit from Flask/werkzeug/numpy/scipy propagated as raw PyException.
+   - Fix: Split into start_server() wrapper + _start_server_inner(). Wrapper catches
+     SystemExit (converts to RuntimeError with descriptive message) and BaseException
+     (logs full traceback before re-raising).
+
+3. Port 8080 stuck from previous crash
+   - When app was force-killed (cable pull, ANR, OOM), old Python process could hold
+     the TCP port. Next launch: make_server() fails "Address already in use".
+   - Fix: Added _ensure_port_free(port) utility in main.py -- probes port with
+     SO_REUSEADDR, retries up to 3 seconds. Also patched web_server.py
+     TelescopeWebServer.start() to force SO_REUSEADDR on werkzeug's BaseWSGIServer
+     via monkey-patched server_bind().
+
+Additional hardening:
+- TelescopeService.kt: Added onTaskRemoved() override to call stopSelf() when user
+  swipes app from recents (ensures Python backend and port are released).
+- TelescopeService.kt: Improved error messages in catch block -- detects SystemExit,
+  "Address already in use", MissingForegroundServiceType and shows human-readable
+  messages instead of raw exception text.
+
+Files changed:
+- TelescopeService.kt (imports: ServiceInfo, Build; onCreate: startForeground with
+  service type; new onTaskRemoved; better error messages in startPythonBackend catch)
+- android_bridge/main.py (import socket; start_server split into wrapper +
+  _start_server_inner; new _ensure_port_free function)
+- web_server.py (TelescopeWebServer.start: SO_REUSEADDR patch on BaseWSGIServer)
+
+Task 2: ASCOM camera cleanup for Android
+Analysis: ASCOM camera code is dead on Android -- requires pywin32 + Windows COM.
+The shared Python modules are copied verbatim into APK, so ASCOM classes exist but
+can never connect. Problem: the web UI exposed "ASCOM Camera" options to Android
+users (dropdown + settings panels), and _HAS_ASCOM evaluated to True because the
+ASCOMCameraCapture class imports fine (win32com is stubbed, only fails at
+Dispatch() call time).
+
+Fix approach: Platform-aware, no changes to desktop behavior.
+- web_server.py: Added _IS_ANDROID = os.environ.get("TELESCOPE_PLATFORM") == "android"
+  at module level. _HAS_ASCOM = not _IS_ANDROID (False on Android, True on Windows).
+- web_server.py: Added "platform" field to _collect_state() return dict
+  ("android" or "desktop") so JS knows the platform.
+- web_server.py JS: On first pollStatus(), if platform === "android", removes:
+  - #solve-mode option[value="ascom"] (plate-solve source dropdown)
+  - #solve-ascom-fields div (ASCOM camera chooser + exposure/gain/binning)
+  - #lv-cam-source option[value="ascom"] (live camera source dropdown)
+  - #cam-ascom-fields div (live view ASCOM settings panel)
+- web_server.py JS: Added null checks in onSolveModeChange() and onCamSourceChange()
+  for the removed elements.
+- web_server.py JS: Wrapped ASCOM field updates in pollStatus() with
+  if (document.getElementById('ascom-cam-name')) guard to prevent crashes.
+- /api/camera/status now correctly reports ascom_available: false on Android.
+
+Key discovery: Removing ASCOM DOM elements caused a JS TypeError crash
+("Cannot read properties of null (reading 'style')") in onSolveModeChange() which
+was called from pollStatus() every 2 seconds. This crash broke the ENTIRE UI update
+loop, including weather display. This was the actual cause of weather not showing.
+
+Task 3: Weather data not displaying after GPS save
+Root cause analysis: Multiple compounding bugs:
+
+1. No initial weather fetch at startup
+   - _update_weather() was NEVER called during __init__() or start() in
+     HEADLESS_SERVER.py. Weather only arrived after the 60-second JS auto-refresh
+     timer or manual action.
+   - Fix: Added initial weather fetch in start() via a daemon thread
+     (InitialWeatherFetch) that calls _update_weather() non-blocking.
+
+2. Silent failure when get_weather() returns None
+   - If the Open-Meteo API call failed, get_weather() returned self.cached_data
+     (None on first call). _update_weather() checked "if data:" but had NO else
+     branch -- no error log, no status update, vars stayed as "--°C".
+   - Fix: Added else branch setting weather_status_var to "Fetch failed -- will retry"
+     and logging a warning.
+
+3. Coordinates 0,0 on first launch
+   - Default Android coordinates were 0.0, 0.0 (middle of Atlantic).
+     Weather would fetch for wrong location.
+   - Fix: Added early return in _update_weather() if lat==0 and lon==0 with
+     status "Set location first".
+
+4. Cache backoff blocking retries after coordinate change
+   - After failures, exponential backoff extended cache to 15 min. When user
+     finally set correct GPS coordinates, the backoff prevented immediate retry.
+   - Fix: Added cache invalidation logic in _update_weather() that resets
+     cached_data, last_update_time, and _consecutive_failures when coordinates
+     change by more than 0.01 degrees.
+
+5. Async weather refresh after location save
+   - /api/location endpoint used execute_command() (async, fire-and-forget) for
+     weather refresh. Response returned before weather completed.
+   - Fix: Changed to _execute_and_wait(app._update_weather, timeout=10) so the
+     location save response includes weather_refreshed status.
+
+6. JS crash from ASCOM removal (see Task 2 above)
+   - The pollStatus() function crashed on every tick due to removed ASCOM elements,
+     which prevented weather data from being rendered in the DOM even though the
+     API had valid weather data.
+   - Fix: Null checks on all ASCOM element access (see Task 2).
+
+Files changed:
+- HEADLESS_SERVER.py (_update_weather: 0,0 skip, cache invalidation, "Fetching..."
+  status, None data feedback; start: InitialWeatherFetch daemon thread)
+- web_server.py (import os; _IS_ANDROID + _HAS_ASCOM platform check; _collect_state
+  adds "platform" field; /api/location uses _execute_and_wait for weather refresh;
+  JS: platform-based ASCOM removal + null checks in pollStatus/onSolveModeChange/
+  onCamSourceChange)
+
+Architecture Notes for Future Reference
+========================================
+
+Android app startup sequence:
+1. TelescopeApp.onCreate() -> PyApplication.onCreate() starts Python (background thread)
+2. MainActivity.onCreate() -> binds to TelescopeService
+3. TelescopeService.onCreate():
+   a. Acquires partial wake lock (12h)
+   b. Creates CameraManager + UsbSerialManager
+   c. startForeground() with FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+   d. startPythonBackend() launches python thread:
+      - awaitPython(60s) waits for Python interpreter
+      - Calls android_bridge.main.start_server(data_dir, cache_dir, port=8080)
+      - start_server() wraps _start_server_inner() with SystemExit catch
+      - _start_server_inner(): sets paths, logging, _ensure_port_free(8080),
+        extracts catalog assets, patches for Android, imports HEADLESS_SERVER,
+        creates HeadlessTelescopeApp, calls start() (non-blocking)
+      - Injects CameraManager + UsbSerialManager into Python bridges
+      - waitForFlask() polls /api/status for 30s
+   e. Sets isServerReady, fires readyCallbacks
+4. MainActivity.onServiceReady() -> loads WebView at http://127.0.0.1:8080
+
+Key env var: TELESCOPE_PLATFORM = "android" (set in _start_server_inner)
+Used by: web_server.py _IS_ANDROID check, _patch_for_android() conditions
+
+Weather data flow:
+- OpenMeteoService.get_weather(lat, lon) -> HTTP GET to api.open-meteo.com
+- Cached for 600s (10 min), exponential backoff on failure up to 15 min
+- _update_weather() reads lat_var/lon_var, calls get_weather(), updates HeadlessVars
+- Triggered by: initial startup thread, /api/weather/refresh (60s JS timer),
+  /api/location POST (synchronous after saving coords)
+- Cache invalidated when coordinates change >0.01 degrees
+
+ASCOM on Android: Dead code. win32com/pythoncom/winreg are stubbed as empty modules
+in _patch_for_android(). ASCOMCameraCapture class exists but Dispatch() calls fail
+with AttributeError caught by try/except. _HAS_ASCOM forced to False on Android.
+UI elements removed from DOM on first pollStatus() via platform check.
+
+Port management: Flask runs on 127.0.0.1:8080.
+- _ensure_port_free() probes with SO_REUSEADDR before startup
+- web_server.py patches BaseWSGIServer.server_bind to force SO_REUSEADDR
+- onTaskRemoved() calls stopSelf() to release port on app swipe
+- onDestroy() calls stop_server() for clean Python shutdown
+
+
+Todos
+[✓] Fix position display not reflecting true telescope position after connection
+[✓] Fix position display freezing during GoTo slewing
+[✓] Wire on_altaz_update callback (was NEVER connected -- critical missing link)
+[✓] Add SLEWING indicator and real-time position updates during GoTo
+[✓] Enhance Log tab with timestamps, filters, command logging
+[✓] Create comprehensive HTML User Guide with detailed Telemetry tab explanations
+
+Session Summary -- Real-Time Position Display + Log Enhancement + User Guide
+=============================================================================
+
+Task 1: Position Display Not Reflecting True Telescope Position (3 root causes)
+
+Root cause analysis: After connecting to a telescope (real or simulator), the
+Position card at the top of the screen showed default/stale values instead of
+the mount's actual pointing position. Three compounding bugs:
+
+1. on_altaz_update callback NEVER WIRED (PRIMARY CAUSE)
+   - telescope_bridge._read_loop() polls the mount with :GA#/:GZ# every 2 seconds
+     and fires self.on_altaz_update(alt_response, az_response).
+   - HEADLESS_SERVER.py._toggle_usb_telescope() called bridge.connect() but NEVER
+     set bridge.on_altaz_update to a callback function.
+   - Result: Mount position data was received from hardware but discarded -- it
+     never reached self.protocol or the web UI.
+   - Fix: Added _wire_position_callback(bridge) method to HEADLESS_SERVER.py that
+     creates a callback parsing raw LX200 DMS strings (e.g., "+45*30:15#") to
+     decimal degrees using new _parse_lx200_dms() static method, then writes:
+       * self.protocol.alt_degrees / az_degrees (direct from mount)
+       * self.protocol.ra_hours / dec_degrees (derived via _alt_az_to_ra_dec)
+       * self.protocol.is_slewing (from slew status flag)
+   - Wired BEFORE connect in _toggle_usb_telescope() and _toggle_simulator()
+
+2. Position NOT READ during slewing
+   - telescope_bridge._read_loop() checked :D# for slew status. If is_slewing=True,
+     it SKIPPED reading :GA#/:GZ# entirely and just slept 2 seconds.
+   - telescope_simulator._read_loop() had the same skip pattern.
+   - Result: During GoTo, position display froze at the pre-slew position.
+   - Fix: Removed the "if not is_slewing:" guard in both bridge and simulator.
+     Now ALWAYS reads position regardless of slew state. Added is_slewing
+     parameter to the on_altaz_update callback signature (3rd arg).
+
+3. No slew state tracking or UI feedback
+   - The protocol had is_slewing but it was never updated from the real mount's
+     :D# response. The web UI had no slewing indicator.
+   - Fix: is_slewing is now set from the _read_loop :D# check via the callback.
+     Added slew state transition logging in both bridge and simulator:
+     "Telescope is slewing..." / "Slew complete - telescope stationary"
+
+Files changed:
+- telescope_bridge.py:
+  * _read_loop(): Always read Alt/Az (removed is_slewing skip), added slew
+    state transition logging, added was_slewing tracker, faster polling during
+    slew (1s vs 2s), callback now passes is_slewing as 3rd parameter
+  * force_position_update(): Updated callback to pass is_slewing=False
+  * goto_altaz(): Enhanced logging -- logs :MA# send, acceptance/refusal with
+    full mount response
+  * goto(): Enhanced logging -- logs :MS# send, acceptance/refusal
+
+- telescope_simulator.py:
+  * _read_loop(): Always report position during slewing (removed skip), added
+    slew state transition logging, faster poll during slew (0.5s), callback
+    signature updated with is_slewing 3rd parameter
+  * force_position_update(): Updated callback signature
+
+- HEADLESS_SERVER.py:
+  * New _parse_lx200_dms(s) static method: Parses LX200 DMS strings
+    (sDD*MM:SS#, sDD*MM#, plain float) to decimal degrees
+  * New _wire_position_callback(bridge) method: Creates on_altaz_update
+    callback that parses raw strings, updates protocol.alt_degrees,
+    protocol.az_degrees, derives RA/Dec, sets protocol.is_slewing
+  * _toggle_usb_telescope(): Calls _wire_position_callback() before connect,
+    adds connecting log message with IP/port details, clears is_slewing on
+    disconnect
+  * _toggle_simulator(): Calls _wire_position_callback() before connect,
+    clears is_slewing on deactivate
+  * _goto_altaz_from_radec(): Enhanced logging -- logs request, target set
+    responses (:Sr/:Sd), :MS# result, sets is_slewing and telescope_status_var
+
+Task 2: UI Enhancements for Position & Slewing
+
+- web_server.py _collect_state():
+  * Added target_alt, target_az to position section
+
+- web_server.py HTML (Position card):
+  * Added SLEWING badge with pulse animation (appears during GoTo)
+  * Reordered: Alt/Az shown first with larger font (primary coordinates)
+  * Added slew info bar showing "Telescope is slewing to target..."
+  * Card border glows orange during slewing via inline style update
+
+- web_server.py JS (pollStatus):
+  * Reads p.is_slewing from state, toggles SLEWING badge visibility
+  * Adaptive polling: switches to 800ms during slewing (vs 2s normal)
+    via window._fastPollActive / _fastPollTimer / _normalPollTimer
+  * Position card border style changes dynamically based on slew state
+
+- web_server.py CSS:
+  * Added .log-line.cmd (blue -- command log lines)
+  * Added .log-line.slew (orange bold -- slew event lines)
+  * Added .log-line.position (light blue dimmed -- position report lines)
+  * @keyframes pulse already existed (reused for SLEWING badge)
+
+Task 3: Log Tab Enhancement
+
+- web_server.py HTML (Log tab):
+  * Renamed to "Telescope Event Log" with subtitle
+  * Added Clear and Copy buttons
+  * Added filter checkboxes: Errors (red), Warnings (yellow), Success (green),
+    Commands (blue), Info (gray) -- all checked by default
+  * Each checkbox calls applyLogFilter() to show/hide log lines by tag
+
+- web_server.py JS (pollLog):
+  * Each log line now includes timestamp prefix: [HH:MM:SS] TAG     message
+  * Lines store data-tag attribute for filtering
+  * New lines respect current filter checkbox state
+  * Buffer increased from 1000 to 1500 lines
+
+- web_server.py JS (new functions):
+  * clearLog(): Clears all log lines
+  * copyLog(): Copies visible (non-filtered) lines to clipboard
+  * applyLogFilter(): Iterates log lines, shows/hides based on checkbox state
+
+Task 4: Comprehensive HTML User Guide
+
+Created: android app/TelescopeController_UserGuide.html
+Self-contained HTML file (no external dependencies), dark theme matching the app,
+responsive design for mobile viewing.
+
+14 chapters:
+  1. Installation & First Launch -- APK install, permissions, checklist
+  2. Connecting to Your Telescope -- WiFi/TCP, USB serial, simulator, status indicators
+  3. Understanding the Position Display -- Alt/Az (primary), RA/Dec (derived),
+     tracking rates, real-time slewing updates, ASCII data flow diagram
+  4. GoTo & Catalog Navigation -- search, browse, GoTo process step-by-step
+  5. Manual Slew Controls -- directional buttons, speed levels, keyboard, emergency stop
+  6. Telemetry Tab (DETAILED) -- 6 subsections:
+     6.1 Tracking Error Chart -- RMS interpretation table, chart patterns to look for
+     6.2 Correction Sources -- 4-source table with weight ranges, axis toggle
+     6.3 Kalman Filter Internals -- all 8 state variables explained, residuals/innovation
+     6.4 ML Drift Predictor -- 6 metrics, model weights chart, feature explanations
+     6.5 Periodic Error Correction -- FFT analysis, period detection, correction curve
+     6.6 How to Interpret Telemetry -- 4 practical troubleshooting scenarios
+     ASCII pipeline diagram showing full correction pipeline architecture
+  7. Plate Solving -- solver modes, astrometry.net API key setup
+  8. Tracking System -- 5Hz control loop, pipeline steps
+  9. Camera & Live View -- UVC, phone, ZWO ASI support
+  10. Log Tab (DETAILED) -- event types table, example log output for every category,
+      troubleshooting patterns table, filtering, exporting
+  11. Location & Weather -- GPS, manual entry, weather data
+  12. Alignment -- multi-star auto-alignment process
+  13. Troubleshooting -- common problems and solutions
+  14. Hardware Compatibility -- mounts, connections, cameras
+  Appendix: LX200 Commands -- full command reference table
+
+Discoveries
+===========
+13. on_altaz_update callback was the critical missing link between the telescope
+    hardware and the UI. The _read_loop() in telescope_bridge.py was working
+    correctly (polling :GA#/:GZ# every 2s), but the callback was None so the
+    position data was silently discarded. The protocol object retained its
+    initial default values (45.00 Alt, 180.00 Az) indefinitely.
+
+14. Skipping position reads during slewing was an intentional design decision
+    (comment: "avoids reading unstable intermediate positions") but wrong for
+    the user experience. OnStep firmware reports valid intermediate positions
+    during slewing -- they ARE the real-time position of the telescope as it
+    moves. Reading them is safe and provides essential visual feedback.
+
+15. The callback signature change (adding is_slewing as 3rd parameter) is
+    backward compatible because the old callback was None (never set). Any
+    future code wiring the callback must accept 3 arguments:
+    on_altaz_update(alt_str: str, az_str: str, is_slewing: bool)
+
+Position data flow (complete chain, now working):
+  Mount firmware -> :GA#/:GZ# response (LX200 DMS strings)
+  -> telescope_bridge._read_loop() (polls every 1-2s)
+  -> on_altaz_update callback (set by _wire_position_callback)
+  -> _parse_lx200_dms() converts to decimal degrees
+  -> protocol.alt_degrees/az_degrees updated directly
+  -> protocol._alt_az_to_ra_dec() derives RA/Dec
+  -> _update_position_display() formats HeadlessVar strings (1-2 Hz tick)
+  -> web_server._collect_state() reads vars into JSON snapshot
+  -> /api/status endpoint returns JSON (polled by JS at 0.8-2s)
+  -> pollStatus() JS updates Position card DOM elements
+
+Final State
+===========
+- 476/476 tests passing (428 desktop + 48 Android bridge)
+- APK builds cleanly -- BUILD SUCCESSFUL in 5s
+- APK at: android app/app/build/outputs/apk/debug/app-debug.apk
+- User Guide at: android app/TelescopeController_UserGuide.html
+
+Files changed this session (all applied to ROOT source files):
+- telescope_bridge.py (position read during slewing, slew logging, callback signature)
+- telescope_simulator.py (position read during slewing, was_slewing transition
+  logging, callback 3-arg signature, faster poll during slew, force_position_update
+  with is_slewing parameter)
+- HEADLESS_SERVER.py (_parse_lx200_dms, _wire_position_callback, wired before
+  connect in _toggle_usb_telescope and _toggle_simulator, protocol.is_slewing
+  cleared on disconnect, enhanced GoTo logging with accept/refuse interpretation)
+- web_server.py (SLEWING indicator, adaptive polling, log tab enhancement, CSS,
+  collapsible toolbar with gear icon)
+- lx200_protocol.py (default home position Alt=0 Az=0 instead of Alt=45 Az=180)
+- TelescopeController_UserGuide.html (NEW -- 14-chapter comprehensive user guide)
+
+NOTE: Root source files are synced into the Android APK by Gradle's
+syncPythonSources task. All Python edits MUST be made to TelescopeController/*.py
+(the root), NOT to android app/app/src/main/python/*.py (the copy).
+
+Remaining:
+- Install APK on device (phone not currently connected via ADB)
+- Verify position updates on real hardware via adb logcat
+
+
+Todos
+[✓] Phase 2: UI/UX Improvements (target name, status lights, session download, plate solve, weather)
+[✓] Phase 3: PHD2 Removal + Cloud Solver Cellular Routing
+[✓] Phase 4: Position Pipeline Overhaul + Controls Fixes
+[✓] Phase 5: ZWO ASI + UVC Camera Support + Camera Source UI
+
+Session Summary -- Phases 2-5: UI Polish, PHD2 Removal, Position Pipeline, Camera Support
+===========================================================================================
+
+Phase 2 (COMPLETED): UI/UX Improvements
+- Target name display in Position card
+- Status indicator lights (connection, tracking, slewing)
+- Session download fix
+- Plate solve mode cleanup
+- Weather no-internet notice when on telescope WiFi
+- Weather via cellular (4G/5G) network bridge
+- Dangling JS reference fix
+
+Phase 3 (COMPLETED): PHD2 Removal + Cloud Solver Cellular
+- PHD2 fully removed from ~28 files across the codebase
+- Tracking weights simplified to Kalman 45% / ML 55% always
+- Cloud solver routed through cellular -- all 6 HTTP calls to nova.astrometry.net
+  now route through 4G/5G mobile data on Android
+- UI transparency increased, active button glow boosted, inactive buttons dimmed
+
+Phase 4 (COMPLETED): Position Pipeline Overhaul + Controls Fixes
+- RA/Dec now read directly from mount via :GR#/:GD# (not computed locally)
+- Lat/lon propagation from config to protocol
+- _parse_lx200_dms apostrophe fix (was breaking coordinate parsing)
+- Focuser position polling via :FG# command
+- Derotator software angle tracking
+- Polling speed doubled (1s intervals)
+- Target Alt/Az display in GoTo UI
+- Solve start/stop toast fix
+- Camera-not-connected error handling fix
+- "Webcam" renamed to "Camera" throughout UI
+- All verified on live mount with real OnStep hardware via WiFi
+
+Phase 5 (COMPLETED): ZWO ASI + UVC Camera Support
+- Researched ZWO ASI SDK -- NO official Android version exists
+- Discovery: Most planetary ASI cameras (ASI120, ASI224, ASI290, ASI385, ASI462)
+  support UVC mode and appear as standard USB video devices
+- Cooled deep-sky cameras (ASI294 Pro, ASI2600, etc.) do NOT support UVC
+- ZWO USB Vendor ID: 0x03C3 (963 decimal) added to usb_device_filter.xml
+- All UVC camera libraries have broken JitPack builds (saki4510t, jiangdongguo)
+- SOLUTION: Cloned AndroidUSBCamera repo locally, copied Java source files
+  (UVCCamera.java, USBMonitor.java, etc.) and pre-compiled native .so files
+  directly into the project. No external dependency needed.
+- Rewrote CameraManager.kt with full UVC + ZWO + phone camera support using
+  USBMonitor + UVCCamera JNI classes + Camera2 API fallback
+- Updated camera_bridge.py with open_uvc_camera(), open_zwo_camera(),
+  get_active_source() methods
+- Updated main.py monkey-patches with camera priority: ZWO ASI > generic UVC > phone
+- Simplified XLogWrapper.java to remove xlog dependency
+- Fixed _log AttributeError: _android_close_camera and _android_open_uvc_camera
+  were calling self._log() on TelescopeWebServer which doesn't have that method.
+  Changed to logger.info()/logger.warning()
+- Added camera source selector UI for Android: dropdown with Auto (best), ZWO ASI,
+  USB Camera, Phone Camera options. Desktop dropdown unchanged (UVC/ASCOM).
+- _android_open_uvc_camera now respects self._android_source hint from UI
+- /api/camera/start accepts android_source parameter
+- /api/camera/status returns android_source in response
+- Deleted leftover app/libs/libausbc-3.3.3.aar
+- BUILD SUCCESSFUL -- APK ~101MB with UVC native libs included
+- Verified on device: phone camera opens, streams 7.9 MB/3s MJPEG data,
+  shuts down cleanly with no errors
+
+Discoveries
+===========
+16. ZWO ASI has NO official Android SDK. Their C SDK (libASICamera2) is Linux/
+    Windows/macOS desktop only. It relies on libusb which doesn't work on
+    Android without root.
+
+17. Most planetary ASI cameras (ASI120, ASI224, ASI290, ASI385, ASI462)
+    support UVC mode -- they appear as standard USB video devices and can be
+    accessed via the UVC protocol without the proprietary SDK.
+
+18. Cooled deep-sky ASI cameras (ASI294 Pro, ASI2600, etc.) do NOT support
+    UVC -- they require the proprietary SDK protocol which has no Android version.
+
+19. All UVC camera libraries have broken JitPack builds:
+    - com.github.saki4510t:UVCCamera -- ALL builds "Error"
+    - com.github.jiangdongguo.AndroidUSBCamera:libausbc:3.3.3 -- build "Error"
+    - Older version 2.3.8 has a broken POM
+    Solution: Copy source + pre-compiled .so files directly into the project.
+
+20. UVCCamera requires a preview target even for headless capture. A dummy
+    SurfaceTexture(0) is created for this purpose.
+
+21. Kotlin property/method name clash: var exposureMs generates a setExposureMs()
+    setter that clashes with an explicit setExposureMs() method. Fixed by using
+    _exposureMs backing field.
+
+22. OnStep was initially in EQ mode -- user's mount reported Alt=50.52 at home
+    because OnStep was configured as equatorial, not alt-az. User fixed in firmware.
+
+23. RA/Dec was computed locally with wrong lat/lon. Fixed by propagating lat/lon
+    from config and querying :GR#/:GD# directly from the mount.
+
+24. Tracking rates are one-directional: app computes rates locally (Kalman 45% +
+    ML 55% + sidereal base + PEC) at 5 Hz and sends them TO the mount.
+
+25. :D# slew detection doesn't work on real OnStep mount via WiFi/TCP -- during
+    real hardware testing, is_slewing never becomes True even during GoTo.
+
+26. Weather fails on telescope WiFi -- phone connects to telescope's WiFi hotspot
+    which has no internet. Solved by creating cellular network bridge that routes
+    HTTP requests through 4G/5G mobile data.
+
+Files changed (Phase 5, this session):
+- web_server.py:
+  * Added _android_source field init (line 194)
+  * _open_camera() accepts android_source param, stores on self
+  * /api/camera/start passes android_source to _open_camera
+  * /api/camera/status includes android_source in response
+  * JS: Android platform check replaces dropdown with Auto/ZWO/USB/Phone options
+  * JS: window._isAndroid flag for conditional UI behavior
+  * JS: camStart() handles android-specific source values
+  * JS: onCamSourceChange() hides UVC fields on Android
+
+- android app/app/src/main/python/android_bridge/main.py:
+  * Fixed self._log -> logger.info/logger.warning in _android_close_camera
+    and _android_open_uvc_camera (was causing AttributeError crash)
+  * _android_open_uvc_camera now reads self._android_source hint
+    (auto/zwo/uvc/phone) to open specific camera instead of always auto-detecting
+
+- android app/app/src/main/java/com/telescopecontroller/camera/CameraManager.kt:
+  * Full rewrite with UVC + ZWO + phone camera support
+  * USBMonitor for USB device management
+  * UVCCamera for UVC protocol via JNI
+  * Camera2 API for phone camera fallback
+  * Frame callback converts NV21->JPEG for latestJpeg
+
+- android app/app/src/main/python/android_bridge/camera_bridge.py:
+  * Added open_uvc_camera(), open_zwo_camera(), get_active_source() methods
+
+- UVC native library files copied from AndroidUSBCamera:
+  * Java: UVCCamera.java, USBMonitor.java, DeviceFilter.java, etc.
+  * Native: libUVCCamera.so, libusb100.so, libuvc.so, libjpeg-turbo1500.so
+    for arm64-v8a, armeabi-v7a, x86_64
+
+- android app/app/build.gradle.kts: Removed JitPack AUSBC dependency
+
+- Deleted: android app/app/libs/libausbc-3.3.3.aar (leftover from failed attempt)
+
+Test Results
+============
+- 419/419 desktop tests passing
+- 48/48 Android tests passing (11 subtests)
+- APK builds in ~2-5 seconds (incremental)
+- APK size: ~101 MB (includes UVC native libs for 3 architectures)
+
+Current Status
+==============
+- All 5 phases complete
+- App fully functional on real hardware (Samsung Galaxy, OnStep Dobson via WiFi)
+- Phone camera live view verified (7.9 MB/3s MJPEG stream)
+- Camera source selection UI working (Auto/ZWO/USB/Phone on Android)
+- APK copied to device Downloads folder as TelescopeController.apk
+
+
+Todos
+[✓] Fix plate-solve Start/Stop not working on Android
+[✓] Fix plate-solve dropdown showing only 1 camera option on Android
+[✓] Fix :D# slew detection on real OnStep via WiFi/TCP
+[✓] Improve local offline plate solver accuracy
+[✓] Project cleanup (.gitignore, empty dirs)
+
+Session Summary -- Plate Solve Fix + Slew Detection + Solver Improvements
+=========================================================================
+
+Task 1: Plate Solving Tab Completely Broken on Android (4 root causes)
+
+Root cause analysis: "Start Solving" and "Stop Solving" buttons did nothing
+on Android. The plate-solve source dropdown showed only 1 option ("Camera").
+
+1. applyCameraSettings() JS crash (PRIMARY CAUSE)
+   - When Android platform is detected, the ASCOM DOM elements (#solve-ascom-fields,
+     #ascom-exp, #ascom-gain, #ascom-bin) are removed from the DOM via .remove().
+   - applyCameraSettings() then reads document.getElementById('ascom-exp').value
+     which returns null.value -> TypeError crash.
+   - This crash prevented the setTimeout() for /api/solve/start from ever firing.
+   - Fix: Null-safe access with (document.getElementById('ascom-exp') || {}).value
+     pattern. ASCOM fields only included in body when DOM elements exist.
+
+2. doSolveStart() race condition
+   - Original code: applyCameraSettings() (async POST, not awaited) then
+     setTimeout(() => apiPost('/api/solve/start'), 200).
+   - The 200ms delay was a guess hoping settings applied in time. If settings
+     hadn't been applied, solver started with stale config.
+   - Fix: Made doSolveStart() async, properly awaits applyCameraSettings()
+     before calling /api/solve/start.
+
+3. Only 1 camera option in plate-solve dropdown
+   - Android JS removed the ASCOM option but added nothing in its place.
+   - The live camera tab had Android options (Auto/ZWO/UVC/Phone) but the
+     plate-solve tab did not.
+   - Fix: Replace entire #solve-mode dropdown on Android with 4 options:
+     Auto (best available), ZWO ASI Camera, USB Camera, Phone Camera.
+   - Also hide the desktop "Cam #" field (irrelevant on Android).
+
+4. Camera source hint not wired to plate-solve path
+   - When user selected "ZWO ASI Camera" in the plate-solve dropdown, the
+     selection was never passed to the camera bridge.
+   - Fix: applyCameraSettings() now sends android_source in the body.
+     /api/camera/settings stores it on app._android_camera_source.
+     _android_start_camera_mode reads it from the global _app ref.
+     The hint controls which camera opens: auto/zwo/uvc/phone.
+
+Files changed:
+- web_server.py:
+  * applyCameraSettings(): Null-safe ASCOM field access, sends android_source
+  * doSolveStart(): Now async, awaits settings before starting solve
+  * doSolveStop(): Now async for consistency
+  * onSolveModeChange(): Early return on Android (no extra fields to toggle)
+  * Android platform detection JS: Replaces plate-solve dropdown with
+    Auto/ZWO/UVC/Phone options, hides desktop "Cam #" field
+  * /api/camera/settings: Accepts android_source parameter, maps Android
+    camera sources (auto/zwo/uvc/phone) to "camera" solve mode
+
+- android_bridge/main.py:
+  * _android_start_camera_mode(): Reads _app._android_camera_source hint,
+    opens specific camera based on hint instead of always auto-detecting
+
+Task 2: :D# Slew Detection Broken on Real OnStep via WiFi/TCP
+
+Root cause analysis: During real hardware testing, is_slewing never became
+True even during active GoTo. The :D# command response was unreliable over
+WiFi/TCP (Discovery #25).
+
+Fix: Triple-method slew detection:
+  A. :D# (standard LX200) -- kept as-is, checks for '|' in response
+  B. :GU# (OnStep extended status) -- NEW. More reliable than :D#.
+     Returns multi-char status string where lowercase 'n' = GoTo active,
+     uppercase 'N' = not slewing. Parsed and OR'd with :D# result.
+  C. Position delta (firmware-independent) -- NEW. Compares Alt/Az between
+     successive polls. If position changes by > 0.3 degrees between polls,
+     mount is slewing regardless of :D# or :GU# responses. Handles azimuth
+     wrap-around (359->1 = 2 deg, not 358 deg).
+
+All three methods are OR'd together: is_slewing = d_slewing OR gu_slewing
+OR position_moving. Position-based detection applied after coordinates are
+read (not before, unlike :D# and :GU# which are checked first).
+
+Applied to BOTH serial and TCP transport paths for consistency.
+
+Files changed:
+- telescope_bridge.py:
+  * _read_loop() TCP: Added :GU# query, position-based detection,
+    initialized gu_status before try block, debug logging for state changes
+  * _read_loop() Serial: Added :GU# query for consistency
+  * Added _SLEW_THRESHOLD_DEG = 0.3, _prev_alt, _prev_az tracking vars
+
+Task 3: Local Plate Solver Accuracy Improvements
+
+Four targeted improvements to the offline triangle/quad solver:
+
+1. Multi-FOV search
+   - Previous: Single fixed FOV (default 5 degrees). If wrong, no match.
+   - Now: Tries FOV candidates: [fov, fov*0.5, fov*2, fov*0.25, fov*3].
+     Handles unknown camera setups where FOV estimate is wrong.
+     Phone cameras typically have 50-70 deg FOV, telescopes 0.5-5 deg.
+
+2. Better star detection (hot pixel + elongation rejection)
+   - Hot pixel filter: Rejects peaks where < 3 neighboring pixels are above
+     threshold (single-pixel cosmic rays or hot pixels)
+   - Elongation filter: Computes 2nd-order moments (variance of x/y positions).
+     Rejects peaks with elongation > 4x (satellite trails, diffraction spikes)
+   - Larger centroiding window: half_win 3 -> 4 for better sub-pixel accuracy
+
+3. Full catalog loading
+   - Previous: Loaded only stars.h + messier.h + ngc_select_c.h + caldwell.h
+   - Now: Loads ALL .h files in catalogs/data/ directory (25+ files). More
+     catalog stars = better chance of matching in sparse fields.
+   - Duplicate stars harmless (quad matcher handles them naturally)
+
+4. Adaptive quad matching tolerance
+   - Previous: Single tolerance 0.06 for all images
+   - Now: Tries tight (0.04) first, relaxes to 0.08 if < 3 matches, then
+     to 0.12 as final attempt. Tight tolerance produces fewer false matches
+     on clean images; relaxed tolerance works on noisy images.
+
+Files changed:
+- android_bridge/local_solver.py:
+  * _load_star_catalog(): Loads ALL .h catalog files
+  * _detect_stars(): Hot pixel rejection (n_bright_pixels < 3), elongation
+    filter (second moments, ratio > 4.0), larger centroiding window
+  * _solve_with_quads(): Adaptive quad tolerance (0.04 -> 0.08 -> 0.12)
+  * solve(): Multi-FOV search with 5 candidates, triangle fallback on
+    first 2 FOVs only
+
+Task 4: Project Cleanup
+
+- Created .gitignore at project root with rules for:
+  * Python (__pycache__, .pyc, eggs, venvs)
+  * IDE (.idea, .vscode)
+  * Pytest (.pytest_cache)
+  * OS (DS_Store, Thumbs.db, nul/NUL artifacts)
+  * Logs (*.log)
+  * Android (.gradle, build, local.properties, APK files)
+  * Runtime data (sessions, model files, checkpoints)
+- Added .gitkeep to empty android app/app/libs/ directory
+
+Discoveries
+===========
+27. ZWO ASI has NO official Android SDK. Their "ASI Camera SDK" (V1.41) is
+    Windows/macOS/Linux desktop only (C library using libusb). Their Android
+    apps (ASIAIR, Seestar, SkyAtlas) use proprietary internal APIs not
+    available to third-party developers. The UVC approach for planetary
+    cameras remains the only viable option.
+
+28. applyCameraSettings() was the root cause of ALL plate-solving failures on
+    Android. The ASCOM element removal created a cascading failure:
+    remove #solve-ascom-fields -> getElementById returns null -> null.value
+    throws TypeError -> applyCameraSettings aborts -> setTimeout for
+    /api/solve/start never executes. A single missing null check broke the
+    entire plate-solving pipeline.
+
+29. OnStep :GU# returns a status string with flags like 'n' (GoTo active),
+    'N' (not slewing), 't' (tracking), 'T' (not tracking), etc. This is
+    much more reliable than :D# over WiFi/TCP because it's a longer
+    response with clear state flags rather than just a single '|' character.
+
+30. Position-based slew detection is the most universal approach. It works
+    regardless of firmware, connection type, or protocol quirks. The 0.3
+    degree threshold was chosen because: at typical GoTo slew speeds
+    (2-4 deg/sec) with 1-second poll intervals, the position change between
+    polls is 2-4 degrees -- well above the threshold. Normal tracking drift
+    is < 0.01 deg/sec, well below threshold.
+
+Test Results
+============
+- 419/419 desktop tests passing
+- 48/48 Android tests passing (11 subtests)
+- APK builds in ~3 seconds (incremental)
+- BUILD SUCCESSFUL
+
+Files Changed This Session
+==========================
+- web_server.py (root):
+  * applyCameraSettings() -- null-safe ASCOM fields, android_source support
+  * doSolveStart() -- async, awaits settings before solve
+  * doSolveStop() -- async
+  * onSolveModeChange() -- early return on Android
+  * Android platform detection -- plate-solve dropdown with 4 camera options
+  * /api/camera/settings -- accepts android_source, maps to solve mode
+
+- telescope_bridge.py (root):
+  * _read_loop() -- triple slew detection (:D# + :GU# + position delta)
+  * Both serial and TCP paths updated
+
+- android_bridge/main.py:
+  * _android_start_camera_mode() -- reads _android_camera_source hint
+
+- android_bridge/local_solver.py:
+  * Full catalog loading, hot pixel/elongation rejection, multi-FOV search,
+    adaptive quad tolerance
+
+- .gitignore (NEW at project root)
+- android app/app/libs/.gitkeep (NEW, preserves empty directory)
+
+
+═══════════════════════════════════════════════════════════════════════════
+SESSION CONTINUATION: ASI CAMERA SDK NATIVE INTEGRATION (COMPLETED)
+═══════════════════════════════════════════════════════════════════════════
+
+Task 5: ZWO ASI Camera SDK Native Integration
+==============================================
+Completed the full native ASI SDK integration pipeline. This enables
+direct control of ZWO ASI cameras on Android via the C SDK, bypassing
+the limited UVC protocol. The architecture:
+
+  Kotlin (ASICameraSDK.kt)
+    |-- JNI --> asi_camera_jni.cpp
+                  |-- libusb_interceptor.c (intercepts libusb calls)
+                  |     |-- dlopen("libusb1.0.so") for real libusb functions
+                  |     |-- libusb_wrap_sys_device(dup(android_fd))
+                  |-- libASICamera2.so (ZWO's proprietary SDK, pre-built)
+    |-- Called from CameraManager.kt
+    |-- Exposed to Python via camera_bridge.py
+
+Camera source priority (auto mode):
+  1. ZWO ASI via native SDK (full controls: exposure, gain, ROI, binning,
+     temperature, cooler, high-speed mode, RAW data)
+  2. ZWO ASI via UVC (limited MJPEG, works without SDK libraries)
+  3. Generic USB UVC webcam
+  4. Phone rear camera (Camera2 API)
+
+New Files Created:
+  app/src/main/cpp/CMakeLists.txt
+    - Builds libasi_usb_bridge.so + libasi_camera_jni.so
+    - Links against pre-built libASICamera2.so + libusb1.0.so
+    - Configured for C++17, Android NDK
+
+  app/src/main/java/com/telescopecontroller/camera/ASICameraSDK.kt
+    - Full Kotlin wrapper with native method declarations
+    - Load order: asi_usb_bridge -> ASICamera2 -> asi_camera_jni
+    - Graceful degradation (UnsatisfiedLinkError if .so not bundled)
+    - Camera properties: name, resolution, color, cooled, temperature
+    - Controls: exposure (us), gain, ROI, binning, cooler target
+    - Capture: video mode (streaming) + single exposure mode
+    - Thread-safe (native mutex in C layer)
+
+Files Modified:
+  app/build.gradle.kts
+    - Added externalNativeBuild { cmake { ... } } for NDK/CMake
+    - CMake path: src/main/cpp/CMakeLists.txt
+    - C++ STL: c++_shared
+
+  app/src/main/java/com/telescopecontroller/camera/CameraManager.kt
+    - Added CameraSource.ZWO_ASI_SDK enum value
+    - Added ASICameraSDK instance management
+    - Added openZwoCameraSDK() -- full SDK camera path
+    - Added isAsiSdkAvailable() -- check if .so files present
+    - Added ASI video thread (RAW8 -> JPEG conversion for MJPEG stream)
+    - Added raw8ToJpeg() -- grayscale pixel to JPEG conversion
+    - Added closeAsiSdk() -- cleanup SDK + video thread
+    - Added getAsiSdk(), getAsiTemperature(), setAsiROI(), setAsiCoolerTarget()
+    - Updated setExposureMs() -- forwards to ASI SDK when active
+    - Updated setGain() -- forwards to ASI SDK when active
+    - Updated listCameras() -- shows "SDK" or "UVC" mode per ZWO device
+    - Updated getActiveSourceName() -- shows "(SDK)" suffix
+    - Updated captureImage() -- handles ZWO_ASI_SDK source
+    - Updated close() -- also closes ASI SDK
+
+  app/src/main/python/android_bridge/camera_bridge.py
+    - Updated open_zwo_camera() -- tries SDK first, falls back to UVC
+    - Added is_asi_sdk_available() -- check native library status
+    - Added is_asi_sdk_active() -- check if current camera uses SDK
+    - Added get_asi_temperature() -- read sensor temperature
+    - Added set_asi_roi() -- set capture region/binning
+    - Added set_asi_cooler_target() -- control TEC cooler
+    - Added get_asi_camera_info() -- full camera properties dict
+
+  app/src/main/python/android_bridge/main.py
+    - Updated _android_start_camera_mode() -- added "zwo_sdk" hint
+    - Updated _android_open_uvc_camera() -- added "zwo_sdk" hint
+    - Both now use camera_bridge.is_asi_sdk_available/active for logic
+
+Pre-requisites to Enable ASI SDK (not yet in tree):
+  The following files must be placed manually before building with SDK support:
+
+  1. libASICamera2.so -- from ZWO SDK download
+     Download: https://www.zwoastro.com/software/ -> "For Developers"
+     Extract: lib/armv8/libASICamera2.so (for arm64-v8a)
+     Place at: app/src/main/jniLibs/arm64-v8a/libASICamera2.so
+
+  2. libusb1.0.so -- build from source with Android NDK
+     Source: https://github.com/libusb/libusb (need >= 1.0.23)
+     Build with: Android NDK cmake toolchain for arm64-v8a
+     Key: must include libusb_wrap_sys_device() support
+     Place at: app/src/main/jniLibs/arm64-v8a/libusb1.0.so
+
+  Alternatively: The existing libusb100.so (from UVC library) may work
+  if it's libusb >= 1.0.23. The interceptor tries both "libusb1.0.so"
+  and "libusb-1.0.so" names at runtime.
+
+  WITHOUT these .so files: The build succeeds but ASI SDK features are
+  disabled at runtime. UVC mode still works for planetary cameras.
+
+Tests: 419/419 desktop + 48/48 Android = 467 passing (no regressions)
+
+
+═══════════════════════════════════════════════════════════════════════════
+SESSION CONTINUATION: WIRELESS ADB + LIBUSB FIX + ASI CAMERA CONTROLS
+═══════════════════════════════════════════════════════════════════════════
+
+Task 6: Wireless ADB Debugging Established
+===========================================
+Successfully paired and connected ADB over WiFi to the Samsung Galaxy S10
+(SM_G973U1, RF8M20K2G0K) at 10.188.222.10. This was critical because the
+phone has only ONE USB port -- can't have ADB cable and ASI camera OTG
+adapter simultaneously.
+
+Steps:
+  1. User enabled Wireless Debugging on phone
+  2. adb pair 10.188.222.10:45071 with pairing code 551317 -- SUCCESS
+  3. adb connect 10.188.222.10:45423 -- SUCCESS
+  4. Verified: adb devices shows "10.188.222.10:45423 device"
+
+This unlocked all subsequent debugging with the camera attached.
+
+
+Task 7: Fixed ASI SDK Native Library Loading (libusb-1.0.so)
+=============================================================
+Root cause: libASICamera2.so depends on libusb-1.0.so at runtime. We had
+previously copied libusb100.so (from the UVC library) as libusb-1.0.so,
+but it was INCOMPATIBLE -- different build, different size (108KB vs 75KB).
+
+Diagnosis via logcat:
+  - ASI SDK path was completely SKIPPED (zero ASICameraSDK log lines)
+  - System.loadLibrary("ASICamera2") was failing silently (caught
+    UnsatisfiedLinkError in companion init, isNativeLoaded = false)
+  - App fell through to UVC path which also failed (nativeConnect=-50)
+
+Fix:
+  1. Extracted ZWO's official demo APK (app-release-unsigned.apk from
+     ASI_Camera_SDK/ASISDK_ANDROID/CameraSDK/demo/)
+  2. Found the CORRECT libusb-1.0.so inside (75KB arm64, 59KB armv7, 76KB x86_64)
+  3. Replaced all three ABI copies in jniLibs/
+
+Verification via logcat after fix:
+  I ASICameraSDK: ZWO ASI SDK native libraries loaded
+  I ASICameraSDK: ASIUSBManager context initialized
+
+The SDK now loads successfully on every app launch.
+
+Discovery #38: The ZWO demo APK contains the matching libusb-1.0.so that
+  works with libASICamera2.so. The UVC library's libusb100.so (from
+  saki4510t/AndroidUSBCamera) is a completely different build and is NOT
+  compatible with ZWO's SDK. File sizes: ZWO's = 75,560 bytes (arm64),
+  UVC's = 108,496 bytes (arm64). Both are named "libusb" but they are
+  different versions compiled with different configurations.
+
+
+Task 8: ASI120MM-S Camera Working End-to-End
+=============================================
+After replacing libusb-1.0.so, the full camera pipeline works:
+
+  USB OTG -> Android USB subsystem -> ASIUSBManager -> ZwoCamera
+    -> openCamera() + initCamera() + setRoiFormat()
+    -> startVideoCapture() -> getVideoData() (RAW8 frames)
+    -> raw8ToJpeg() -> latestJpeg (volatile ByteArray)
+    -> getJpegFrame() -> camera_bridge.get_jpeg_frame()
+    -> web_server MJPEG stream -> WebView <img> tag
+
+Camera was initially all-white (overexposed) because:
+  - Default exposure was too high for indoor testing
+  - No exposure/gain controls existed in the web UI
+
+This was addressed in Task 9.
+
+
+Task 9: ASI Camera Exposure/Gain Controls Added
+================================================
+Added full camera control UI and API pipeline for ASI SDK cameras.
+
+Three layers modified:
+
+1. camera_bridge.py -- New generic ASI control functions:
+   - set_asi_control(control_type, value) -> bool
+     Generic setter, calls ASICameraSDK.setControlValue() via Chaquopy
+   - get_asi_control(control_type) -> int
+     Generic getter, calls ASICameraSDK.getControlValue()
+   - get_asi_all_controls() -> dict
+     Reads all major controls at once: exposure_us, gain, gamma, offset,
+     flip, bandwidth, high_speed, temperature, wb_r, wb_b
+   - ASI control type constants defined:
+     ASI_CTRL_GAIN=0, ASI_CTRL_EXPOSURE=1, ASI_CTRL_GAMMA=2,
+     ASI_CTRL_WB_R=3, ASI_CTRL_WB_B=4, ASI_CTRL_OFFSET=5,
+     ASI_CTRL_BANDWIDTH=6, ASI_CTRL_TEMPERATURE=8 (read-only),
+     ASI_CTRL_FLIP=9, ASI_CTRL_HIGH_SPEED=14,
+     ASI_CTRL_COOLER_POWER=15 (read-only), ASI_CTRL_TARGET_TEMP=16,
+     ASI_CTRL_COOLER_ON=17
+
+2. web_server.py -- Two new API routes:
+   POST /api/camera/asi/settings
+     Body: { exposure_ms, gain, gamma, offset, flip, bandwidth, high_speed }
+     Converts exposure_ms to microseconds, calls camera_bridge.set_asi_control()
+     for each provided field. Returns applied values.
+   
+   GET /api/camera/asi/status
+     Returns current control values (via get_asi_all_controls()) and camera
+     info (via get_asi_camera_info()). Converts exposure_us to exposure_ms
+     for UI consumption. Includes temperature_c, camera name, resolution,
+     SDK version.
+
+3. web_server.py -- HTML/CSS/JS camera controls:
+   Added #cam-asi-controls div (hidden by default, shown when ASI camera active):
+   - Exposure (ms): range slider (0-4000) + number input (0-600000)
+     Slider and number input sync bidirectionally via oninput handlers
+   - Gain: range slider (0-300) + value display
+   - Gamma: range slider (0-100) + value display
+   - Offset: range slider (0-255) + value display
+   - Flip: select dropdown (None/Horiz/Vert/Both)
+   - Apply button: calls camApplyAsiSettings()
+   - Refresh button: calls camReadAsiSettings() to read current values
+   
+   JavaScript functions:
+   - camApplyAsiSettings(): POSTs all slider values to /api/camera/asi/settings
+   - camReadAsiSettings(): GETs /api/camera/asi/status, populates sliders
+   - camShowAsiControls(show): Shows/hides controls, reads values on show
+   - asiAutoApply(): Debounced (300ms) auto-apply on slider change events
+   
+   Integration with existing camera UI:
+   - camStart(): Shows ASI controls after 1.5s delay when source is 'auto' or 'zwo'
+   - camStop(): Hides ASI controls
+   - DOMContentLoaded: Attaches 'change' event listeners to all ASI sliders
+     for auto-apply behavior
+   
+   Added '/api/camera/asi/settings' to security endpoints list.
+
+Verified on device: User confirmed controls work -- exposure slider adjusts
+brightness in real-time, overexposure fixed by lowering exposure to ~1-10ms.
+
+Discovery #39: The ASI120MM-S defaults to very high exposure on first open,
+  causing a completely white image indoors. The SDK doesn't auto-expose --
+  the application must explicitly set exposure/gain after opening the camera.
+  Typical indoor values: 1-10ms exposure, gain 10-50. For astronomy:
+  100-2000ms exposure, gain 50-200 depending on target brightness.
+
+Files Changed This Session
+==========================
+- android_bridge/camera_bridge.py (root Android tree):
+  * Added set_asi_control(), get_asi_control(), get_asi_all_controls()
+  * Added ASI_CTRL_* constants (13 control types)
+
+- web_server.py (root):
+  * Added POST /api/camera/asi/settings route
+  * Added GET /api/camera/asi/status route
+  * Added #cam-asi-controls HTML section with sliders
+  * Added camApplyAsiSettings(), camReadAsiSettings(), camShowAsiControls(),
+    asiAutoApply() JavaScript functions
+  * Updated camStart() to show ASI controls for ZWO sources
+  * Updated camStop() to hide ASI controls
+  * Added '/api/camera/asi/settings' to security endpoints
+
+- jniLibs/arm64-v8a/libusb-1.0.so (REPLACED -- from ZWO demo APK, 75KB)
+- jniLibs/armeabi-v7a/libusb-1.0.so (REPLACED -- from ZWO demo APK, 59KB)
+- jniLibs/x86_64/libusb-1.0.so (REPLACED -- from ZWO demo APK, 76KB)
+
+Test Results
+============
+- 419/419 desktop tests passing (pre-existing kalman_filter import error excluded)
+- 48/48 Android bridge tests passing
+- APK builds in ~2-5 seconds (incremental)
+- BUILD SUCCESSFUL
+- Camera live view verified on Samsung S10 + ASI120MM-S via USB OTG
+- Exposure/gain/gamma controls verified working on device
+
+Current Status
+==============
+- ZWO ASI SDK fully operational on Android (native libs load, camera opens,
+  video streams, controls work)
+- Wireless ADB established for debugging with camera attached
+- Full camera control pipeline: Web UI sliders -> JS -> Flask API ->
+  camera_bridge.py -> CameraManager.kt -> ASICameraSDK.kt -> ZwoCamera SDK
+- ASI120MM-S (0x03C3:0x120D) tested and confirmed working
+
+Discovery #31 (SUPERSEDED): ASI SDK library load order -- no longer
+  relevant. We discovered ZWO provides an official Android SDK with a
+  Java API (zwocamera.jar) that handles USB internally. The custom C
+  libusb interceptor approach was replaced entirely.
+
+
+═══════════════════════════════════════════════════════════════════════════
+SESSION CONTINUATION: OFFICIAL ZWO ANDROID SDK INTEGRATION
+═══════════════════════════════════════════════════════════════════════════
+
+Discovery #32: ZWO DOES provide an official Android SDK!
+  Location: ASI_Camera_SDK/ASISDK_ANDROID/CameraSDK/
+  Contents:
+    - zwocamera.jar (Java API -- com.zwo.ZwoCamera, ASIUSBManager, etc.)
+    - libASICamera2.so (native camera SDK for all ABIs)
+    - libzwo_camera.so (JNI bridge for Java SDK)
+    - Full javadoc documentation
+    - Demo app with source
+  
+  The Java SDK handles USB internally via ASIUSBManager.initContext(context).
+  No need for custom libusb interceptors, no JNI bridge needed from our side.
+  This eliminated ~900 lines of custom C/C++ code.
+
+What Changed:
+  DELETED (no longer needed):
+    - app/src/main/cpp/CMakeLists.txt (custom CMake build)
+    - app/src/main/cpp/asi_camera_jni.cpp (custom JNI bridge)
+    - app/src/main/cpp/libusb_interceptor.c (custom libusb interceptor)
+    - app/src/main/cpp/libusb_interceptor.h (interceptor header)
+    - app/src/main/cpp/asi_sdk/ASICamera2.h (our header, replaced by official)
+
+  ADDED (from ZWO SDK):
+    - app/libs/zwocamera.jar (official Java SDK v1.1)
+    - app/src/main/jniLibs/arm64-v8a/libASICamera2.so (7.0 MB)
+    - app/src/main/jniLibs/arm64-v8a/libzwo_camera.so (117 KB)
+    - app/src/main/jniLibs/armeabi-v7a/libASICamera2.so (5.6 MB)
+    - app/src/main/jniLibs/armeabi-v7a/libzwo_camera.so (91 KB)
+    - app/src/main/jniLibs/x86_64/libASICamera2.so (7.2 MB)
+    - app/src/main/jniLibs/x86_64/libzwo_camera.so (111 KB)
+
+  REWRITTEN:
+    - ASICameraSDK.kt: Now uses com.zwo.ZwoCamera Java API instead of JNI
+      * ASIUSBManager.initContext(context) for USB init
+      * ZwoCamera.getNumOfConnectedCameras() for enumeration
+      * ZwoCamera(cameraID) for per-camera control
+      * setRoiFormat(), setControlValue(), startVideoCapture(), getVideoData()
+      * ASIImageBuffer for frame data retrieval
+      * Synchronized wrapper for thread safety
+
+  MODIFIED:
+    - build.gradle.kts: Removed externalNativeBuild/CMake, added
+      implementation(files("libs/zwocamera.jar"))
+    - CameraManager.kt: ASIUSBManager.initContext in init{},
+      openZwoCameraSDK() no longer needs UsbDevice param
+    - camera_bridge.py: open_zwo_camera() tries SDK first, falls back UVC
+    - main.py: Added "zwo_sdk" hint for explicit SDK-only mode
+
+ZWO SDK Java API surface (com.zwo package):
+  ASIUSBManager:
+    .initContext(Context)              -- required first call
+    .getDevices()                      -- list USB devices
+    .getCameraNameList()               -- list camera names
+  ZwoCamera (static):
+    .getNumOfConnectedCameras()        -- count cameras
+    .getCameraProperty(index)          -- get ASICameraProperty
+  ZwoCamera (instance):
+    .openCamera() / .initCamera() / .closeCamera()
+    .setRoiFormat(w, h, bin, imgType)
+    .setControlValue(type, value, auto)
+    .getControlValue(type)             -- returns ASIReturnType
+    .startVideoCapture() / .stopVideoCapture()
+    .getVideoData(ASIImageBuffer, timeoutMs)
+    .startExposure(isDark) / .stopExposure()
+    .getExpStatus() / .getDataAfterExp(ASIImageBuffer)
+  ASIImageBuffer:
+    .allocate(size)                    -- create buffer
+    .getmByteBuffer()                  -- get java.nio.ByteBuffer
+
+Tests: 419/419 desktop + 48/48 Android = 467 passing (no regressions)
+
+=== TASK 10: Raspberry Pi Deployment Archive ===
+STATUS: COMPLETED
+DATE: 2026-03-01
+
+Created a ready-to-deploy archive for Raspberry Pi containing all files
+needed to run the Telescope Controller headless with ZWO ASI camera support.
+
+Archive: TelescopeController_RPi.zip (30.3 MB, 79 files)
+Location: C:\Users\Bogdan\Desktop\Nouveau dossier\TelescopeController_RPi.zip
+
+Contents:
+  - 18 Python source files (all core modules + asi_camera.py)
+  - 5 documentation/config files (guide, requirements, systemd service, install script)
+  - 29 catalog data files (catalogs/data/*.h)
+  - 4 catalog support files (Catalog.cpp, Catalog.h, etc.)
+  - ASI SDK deployment files (asi_sdk/asi.rules, setup_asi_rpi.sh)
+  - ASI SDK Linux .so libraries for all architectures (armv6/v7/v8/x64/x86/mac)
+
+NEW files created:
+  - requirements_rpi.txt: RPi-specific Python dependencies (flask, numpy,
+    opencv-python-headless, pyserial, requests, Pillow) - excludes
+    Windows-only deps (pywin32, matplotlib, vosk, pyinstaller)
+  - install_rpi.sh: Automated installer that sets up venv, installs deps,
+    configures serial permissions, optionally sets up ASI camera and
+    systemd service
+  - build_rpi_archive.ps1: PowerShell script to rebuild the archive
+
+UPDATED files:
+  - RASPBERRY_PI_GUIDE.md:
+    * Corrected Section 1: ZWO ASI cameras now listed as supported hardware
+    * Corrected note: removed "ASCOM cameras won't work on Pi" statement
+    * Updated Camera tab description to mention ASI
+    * Added Section 14: complete ZWO ASI camera setup guide (prerequisites,
+      automated/manual setup, verification, web UI usage, plate solving,
+      troubleshooting, systemd configuration)
+    * Updated Quick Start Summary with ASI setup step and Pillow dep
+  - telescope-controller.service: Added DeviceAllow=/dev/bus/usb/* for ASI
+  - NEED RASPBERRY PY FILES.txt: Updated with complete file manifest
+
+Deployment instructions:
+  1. Copy TelescopeController_RPi.zip to Pi
+  2. unzip TelescopeController_RPi.zip -d ~/TelescopeController
+  3. cd ~/TelescopeController && bash install_rpi.sh
+  4. Follow prompts for ASI camera and systemd setup
+  5. python3 HEADLESS_SERVER.py --simulator  (test)
+  6. Open http://<pi-ip>:8080 on phone
+
+
+═══════════════════════════════════════════════════════════════════════════
+SESSION: APP ICON INTEGRATION + BUILD + DEVICE INSTALL + PLAY STORE PREP
+DATE: 2026-03-01
+═══════════════════════════════════════════════════════════════════════════
+
+Todos
+[✓] Convert ICON APP ANDROID.ico to Android launcher icon PNGs (mipmap folders)
+[✓] Update adaptive icon XML to use new foreground PNG
+[✓] Clean rebuild debug APK with new icon
+[✓] Reinstall APK on USB-connected device (RF8M20K2G0K)
+[✓] Copy APK to device Download folder as TelescopeController.apk
+
+Task 1: App Icon Integration
+=============================
+The app was previously using a vector drawable (ic_telescope.xml) as its
+launcher icon via the adaptive icon system. The user's custom icon file
+"ICON APP ANDROID.ico" was sitting in the project root but never integrated.
+
+ICO file properties:
+  - Format: ICO (Windows icon container)
+  - Available sizes: 16x16, 24x24, 32x32, 48x48, 64x64, 96x96, 128x128, 256x256
+  - Mode: RGBA (full alpha transparency)
+  - Used the 256x256 variant as source for best quality downscaling
+
+Conversion process (Python + Pillow):
+  - Extracted 256x256 RGBA image from ICO container
+  - Generated ic_launcher.png at 5 Android mipmap densities:
+      mipmap-mdpi:    48x48 px
+      mipmap-hdpi:    72x72 px
+      mipmap-xhdpi:   96x96 px
+      mipmap-xxhdpi: 144x144 px
+      mipmap-xxxhdpi:192x192 px
+  - Generated ic_launcher_foreground.png for adaptive icon at 5 densities:
+      mipmap-mdpi:   108x108 px (icon at 70% = 75px centered)
+      mipmap-hdpi:   162x162 px (icon at 70% = 113px centered)
+      mipmap-xhdpi:  216x216 px (icon at 70% = 151px centered)
+      mipmap-xxhdpi: 324x324 px (icon at 70% = 226px centered)
+      mipmap-xxxhdpi:432x432 px (icon at 70% = 302px centered)
+    Foreground images are transparent canvas with icon centered at 70% size
+    to fit within the adaptive icon safe zone (inner 66% of 108dp).
+  - Resampling: Lanczos (highest quality downscale filter)
+
+Files created:
+  app/src/main/res/mipmap-mdpi/ic_launcher.png
+  app/src/main/res/mipmap-hdpi/ic_launcher.png
+  app/src/main/res/mipmap-xhdpi/ic_launcher.png
+  app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+  app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+  app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
+  app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
+  app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
+  app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
+  app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+
+Files modified:
+  app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+    - Changed foreground from @drawable/ic_telescope to @mipmap/ic_launcher_foreground
+    - Background remains @color/ic_launcher_background (#0D1117 dark)
+
+  AndroidManifest.xml -- No changes needed (already referenced @mipmap/ic_launcher
+    for both android:icon and android:roundIcon)
+
+Adaptive icon structure (Android 8.0+ / API 26+):
+  mipmap-anydpi-v26/ic_launcher.xml defines:
+    background: solid #0D1117 (dark, matches app theme)
+    foreground: @mipmap/ic_launcher_foreground (custom icon on transparent canvas)
+  For pre-API 26 (not applicable, minSdk=26):
+    Falls back to mipmap-*/ic_launcher.png directly
+
+Task 2: Clean Rebuild + Install + Copy
+=======================================
+  - gradlew clean assembleDebug -- BUILD SUCCESSFUL in 1m 34s (50 tasks)
+  - adb install -r app-debug.apk -- Streamed Install Success (device RF8M20K2G0K)
+  - adb push app-debug.apk /sdcard/Download/TelescopeController.apk -- 108 MB, 31.5 MB/s
+  - App now shows custom icon on home screen and app drawer
+
+Task 3: Play Store Publishing -- Requirements & Next Steps
+==========================================================
+Analysis of what's needed to publish on Google Play Store:
+
+1. Google Play Developer Account
+   - One-time $25 registration fee at https://play.google.com/console
+   - Requires a Google account
+   - Takes 24-48 hours for account review
+
+2. Release Signing (NOT YET DONE)
+   - Current APK is debug-signed (auto-generated debug.keystore)
+   - Play Store requires a release keystore (PKCS12 or JKS)
+   - Create with: keytool -genkey -v -keystore release.keystore \
+       -keyalg RSA -keysize 2048 -validity 10000 -alias telescopecontroller
+   - CRITICAL: If you lose the keystore, you can NEVER update the app.
+     Back it up securely (NOT in the repo).
+   - Configure in app/build.gradle.kts:
+       signingConfigs {
+           create("release") {
+               storeFile = file("path/to/release.keystore")
+               storePassword = "..."
+               keyAlias = "telescopecontroller"
+               keyPassword = "..."
+           }
+       }
+       buildTypes {
+           release {
+               signingConfig = signingConfigs.getByName("release")
+           }
+       }
+
+3. AAB Format (NOT YET DONE)
+   - Play Store requires Android App Bundle (.aab), not APK
+   - Build with: gradlew bundleRelease
+   - Output: app/build/outputs/bundle/release/app-release.aab
+   - AAB enables split APKs (users download only their device's ABI)
+   - Current APK is 108 MB (3 ABIs). AAB will reduce per-device download
+     to ~40-50 MB (single ABI + shared resources)
+
+4. Store Listing Materials Needed
+   - App title: "Telescope Controller" (max 30 chars)
+   - Short description (max 80 chars)
+   - Full description (max 4000 chars)
+   - At least 2 phone screenshots (16:9 or 9:16, min 320px, max 3840px)
+   - 512x512 high-res icon (can use the ICON APP ANDROID.ico 256x256 upscaled)
+   - 1024x500 feature graphic (banner image for store page)
+   - App category: Tools or Education
+   - Content rating: Complete IARC questionnaire in Play Console
+
+5. Policy Compliance
+   - Privacy Policy URL (MANDATORY -- app uses Camera, Location, Internet)
+     Must describe what data is collected, how it's used, who it's shared with
+   - Data Safety form in Play Console
+   - Target audience declaration
+   - Permissions justification (camera, location, USB, foreground service)
+
+6. Technical Notes
+   - targetSdk = 34 -- meets current Play Store requirements
+   - minSdk = 26 -- Android 8.0+, fine
+   - APK size ~108 MB (3 ABIs) -- under 150 MB AAB limit
+   - With AAB split, per-device download: ~40-50 MB
+   - Chaquopy embedded Python: no Play Store issues (it's just native libs)
+   - ZWO ASI SDK (zwocamera.jar + native .so): Verify redistribution license
+   - UVC libraries: Open source (Apache 2.0), fine for distribution
+
+Steps to complete Play Store release build:
+  1. Create release keystore (keytool)
+  2. Add signingConfigs to build.gradle.kts
+  3. Build: gradlew bundleRelease
+  4. Test release build on device: gradlew installRelease
+  5. Create Play Console account ($25)
+  6. Create app listing with screenshots + descriptions
+  7. Complete content rating + data safety
+  8. Write and host privacy policy
+  9. Upload AAB to Play Console
+  10. Submit for review (typically 1-7 days)
+
+Build Commands Reference
+========================
+  Debug APK (current):
+    java -Xmx64m -Xms64m "-Dorg.gradle.appname=gradlew" \
+      -classpath "gradle/wrapper/gradle-wrapper.jar" \
+      org.gradle.wrapper.GradleWrapperMain assembleDebug
+
+  Release AAB (for Play Store -- needs signing config first):
+    java -Xmx64m -Xms64m "-Dorg.gradle.appname=gradlew" \
+      -classpath "gradle/wrapper/gradle-wrapper.jar" \
+      org.gradle.wrapper.GradleWrapperMain bundleRelease
+
+  Install on device:
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+  Copy APK to device Downloads:
+    MSYS_NO_PATHCONV=1 adb push app/build/outputs/apk/debug/app-debug.apk \
+      /sdcard/Download/TelescopeController.apk
+
+  Note: On Windows Git Bash, MSYS_NO_PATHCONV=1 is required to prevent
+  path mangling of /sdcard/ to C:/Program Files/Git/sdcard/.
+
+Current State
+=============
+  - App icon: Custom icon from ICON APP ANDROID.ico (all mipmap densities)
+  - Debug APK: ~110 MB, installed on device RF8M20K2G0K
+  - APK copy: /sdcard/Download/TelescopeController.apk on device
+  - Tests: 119/119 web_server + 48/48 Android = 167 passing (desktop: 416/419)
+  - BUILD SUCCESSFUL
+  - Play Store: NOT YET -- needs release keystore, AAB build, store listing,
+    privacy policy, and $25 developer account
+
+
+========================================================================
+ SESSION 12: ASTAP Integration Polish, SSE Progress, Timeout Config
+========================================================================
+
+Goal: Polish the ASTAP plate solver integration with real-time progress
+reporting, configurable solver timeout, comprehensive developer comments
+for future maintainability, and updated user guide documentation.
+
+Changes Made
+============
+
+1. SSE (Server-Sent Events) Progress for Database Downloads
+   ---------------------------------------------------------
+   Replaced HTTP polling (every 2 seconds) with real-time push updates:
+
+   - AstapDatabaseManager.kt: Added @Volatile progress fields:
+     downloadState, downloadProgress, downloadTotal, extractedFiles,
+     downloadError, downloadingDbName.  Updated by the download background
+     thread, read by the Python SSE bridge.
+
+   - local_solver.py: Added get_download_progress() function that reads
+     the Kotlin @Volatile fields via Chaquopy Java interop.
+
+   - web_server.py: Added SSE endpoint GET /api/solver/databases/progress
+     that yields JSON events every 500ms with byte-level download progress.
+     Uses Flask Response with mimetype="text/event-stream".
+
+   - web_server.py (JS): Replaced setInterval polling with EventSource.
+     The browser connects once and receives real-time updates showing
+     actual MB downloaded/total, extraction file counts, and completion
+     status.  Falls back gracefully if SSE connection drops.
+
+   Architecture:
+     Browser EventSource <-- SSE events <-- Flask generator
+       reads --> local_solver.get_download_progress()
+         reads --> AstapDatabaseManager.kt @Volatile fields
+           updated by --> download background thread
+
+2. Solver Timeout Configuration
+   ------------------------------
+   Added user-configurable timeout for plate solve operations:
+
+   - web_server.py (API): GET/POST /api/solver/settings now includes
+     "timeout" field (10-600 seconds, default 120).  Saved to
+     solver.timeout in telescope_config.json.
+
+   - web_server.py (HTML): Added timeout slider (10-300) + number input
+     (10-600) in the Plate Solver card, with helper text.
+
+   - cloud_solver.py: Added _get_solver_timeout() function.  The timeout
+     is read from config and passed to both ASTAP local solver
+     (local_solver.solve(timeout_sec=...)) and cloud solver
+     (CloudPlateSolver.timeout = ...).
+
+   - local_solver.py: solve() now accepts timeout_sec parameter (default 120),
+     passed through to AstapSolver.solve() timeoutSec.
+
+3. Code Quality / Developer Comments
+   -----------------------------------
+   All ASTAP-related source files were refactored with comprehensive
+   developer documentation for future maintainability:
+
+   - AstapSolver.kt: Full KDoc with architecture overview, ASTAP CLI
+     invocation details (linker64, command args, WCS output format),
+     thread safety notes, and Python usage examples via Chaquopy.
+     Individual method documentation with parameter descriptions.
+
+   - AstapDatabaseManager.kt: Full KDoc with database descriptions,
+     storage layout, archive format (deb/ar/tar/xz), SSE progress
+     architecture, extraction pipeline documentation, and future
+     improvement notes (XZ decompressor bundling).
+
+   - local_solver.py: Module docstring with architecture diagram,
+     ASTAP overview, database descriptions, SSE progress explanation,
+     thread safety notes, and editing guidelines.  Per-function docstrings
+     with argument descriptions and usage examples.
+
+   - cloud_solver.py: Module docstring with solver mode descriptions,
+     cloud solver details, network routing explanation, timeout config,
+     and editing guidelines.  Enhanced inline comments throughout.
+
+   - main.py: Expanded module docstring with startup sequence, monkey-
+     patching strategy overview, and editing guidelines.
+
+   - web_server.py: Added block comments for solver settings endpoint,
+     ASTAP database management section, and SSE endpoint.  Enhanced
+     JavaScript comments explaining the SSE architecture.
+
+4. User Guide Update
+   --------------------
+   Updated TelescopeController_UserGuide.html Chapter 7 (Plate Solving):
+
+   - Expanded Table of Contents with new subsections
+   - Detailed ASTAP local solver section with architecture diagram
+   - Star database management guide (all 4 databases with FOV ranges)
+   - Database download instructions with progress bar description
+   - Solver timeout configuration guide with recommended values
+   - Cloud API key section with when-to-use guidance
+   - Performance tips for faster plate solving
+
+Files Modified
+==============
+  Modified:
+    - android app/app/src/main/java/com/telescopecontroller/solver/AstapSolver.kt
+      (comprehensive developer comments, clearer structure)
+    - android app/app/src/main/java/com/telescopecontroller/solver/AstapDatabaseManager.kt
+      (SSE progress fields, comprehensive developer comments)
+    - android app/app/src/main/python/android_bridge/local_solver.py
+      (get_download_progress(), timeout_sec param, developer comments)
+    - android app/app/src/main/python/android_bridge/cloud_solver.py
+      (_get_solver_timeout(), timeout propagation, developer comments)
+    - android app/app/src/main/python/android_bridge/main.py
+      (expanded module docstring with architecture overview)
+    - web_server.py (ROOT -- synced to Android by Gradle)
+      (SSE progress endpoint, timeout config API/UI/JS, developer comments)
+    - android app/TelescopeController_UserGuide.html
+      (Chapter 7 complete rewrite with ASTAP documentation)
+    - android app/DEV PLANNING APP.txt (this file)
+
+Test Results
+============
+  48/48 Android bridge tests passing
+  119/119 web_server tests passing
+  416/419 desktop tests passing (3 pre-existing telemetry test failures)
+  BUILD SUCCESSFUL
+
+Discoveries
+===========
+  40. Server-Sent Events (SSE) via Flask is straightforward: return a
+      Response with mimetype="text/event-stream" and a generator that
+      yields "data: {...}\n\n" strings.  Works natively in Android WebView
+      via EventSource.  No WebSocket library needed.  Perfect for one-way
+      server->client push (download progress, status updates).
+
+  41. @Volatile fields in Kotlin are the simplest way to share state
+      between a Java background thread and Python (via Chaquopy).  No need
+      to implement Java interfaces from Python (which requires static_proxy).
+      Chaquopy auto-generates Python getters for Kotlin properties.
+
+  42. Flask's threaded=True server mode supports SSE connections alongside
+      regular API requests.  Each SSE connection occupies one thread for
+      its duration, but for a single-user app this is fine.
+
+
+================================================================================
+SESSION 13 - Bug Fixes & On-Device Testing (2026-03-02)
+================================================================================
+
+Goal
+====
+  On-device testing of the ASTAP integration from Sessions 11-12.
+  Found and fixed three runtime bugs that only manifest on real Android devices.
+
+Bugs Found & Fixed
+===================
+
+  BUG 1: LinkedHashMap$LinkedKeySet not iterable (local_solver.py)
+  ----------------------------------------------------------------
+  Symptom:  GET /api/solver/databases returns {"databases":{}} -- empty list.
+            Logcat: "Error getting database status: 'LinkedHashMap$LinkedKeySet'
+            object is not iterable"
+  Cause:    Chaquopy does NOT make Java's LinkedHashMap$LinkedKeySet directly
+            iterable in Python for-loops.  The code `for name in java_status.keySet()`
+            fails because keySet() returns a Java Set that Python can't iterate.
+  Fix:      Use Java Iterator interface explicitly:
+              key_iter = java_status.keySet().iterator()
+              while key_iter.hasNext():
+                  name = key_iter.next()
+  File:     android app/app/src/main/python/android_bridge/local_solver.py (line ~191)
+
+  BUG 2: JavaScript innerHTML null reference (web_server.py)
+  ----------------------------------------------------------
+  Symptom:  WebView console: "Cannot set properties of null (setting 'innerHTML')"
+            at page line 2479 (camRefreshAscom function).
+  Cause:    On Android, the first pollStatus() call removes the ASCOM camera
+            fields from the DOM (cam-ascom-fields.remove() at line 3974).
+            But setTimeout(camRefreshAscom, 2000) at line 5196 fires 2 seconds
+            later and tries to access lv-ascom-id which no longer exists.
+  Fix:      Added null guard: `if (!sel) return;` at the top of camRefreshAscom().
+  File:     TelescopeController/web_server.py (line ~4976, synced to Android)
+
+  BUG 3: XZ decompression fails -- no star database files extracted
+  -----------------------------------------------------------------
+  Symptom:  Database download completes (101 MB) but extraction fails:
+            "No star database files extracted from archive".
+  Cause:    ASTAP .deb files contain data.tar.xz (XZ/LZMA2 compressed).
+            Android's standard library lacks XZ decompression.  The fallback
+            to shell `xz` command fails because the device doesn't have it.
+  Fix:      Added org.tukaani:xz:1.9 pure Java library (~130 KB, Apache 2.0).
+            Updated AstapDatabaseManager.kt to use XZInputStream directly
+            instead of shell xz command.  Works on all Android devices.
+  Files:    - android app/app/build.gradle.kts (added dependency)
+            - android app/app/src/main/java/.../AstapDatabaseManager.kt
+              (import XZInputStream, use in extractFromTar + extractByRawScan)
+
+On-Device Test Results
+======================
+  All tests performed on Samsung Galaxy device RF8M20K2G0K via USB debug.
+
+  1. App startup:       PASS - Clean launch, no errors in logcat
+  2. Web server:        PASS - Accessible on port 8080, all pages load
+  3. Solver settings:   PASS - GET/POST mode, timeout, API key all persist
+  4. Database listing:  PASS - All 4 databases listed with correct metadata
+  5. D05 download:      PASS - 101 MB downloaded, SSE progress real-time
+  6. D05 extraction:    PASS - 1476 .1476 files extracted via XZInputStream
+  7. Database status:   PASS - d05 shows installed=true after extraction
+  8. Timeout config:    PASS - Slider + number input, values 10-600s accepted
+  9. Mode switching:    PASS - auto/astap/cloud all accepted and persisted
+  10. JS errors:        PASS - Zero JavaScript errors in logcat after fix
+  11. No regressions:   PASS - 48/48 Android bridge tests, 119/119 web_server
+
+Files Modified
+==============
+  - android app/app/src/main/python/android_bridge/local_solver.py
+    (Java Iterator for LinkedHashMap keySet)
+  - TelescopeController/web_server.py
+    (null guard in camRefreshAscom)
+  - android app/app/build.gradle.kts
+    (added org.tukaani:xz:1.9 dependency)
+  - android app/app/src/main/java/.../solver/AstapDatabaseManager.kt
+    (XZInputStream for .deb extraction, updated KDoc comments)
+  - android app/DEV PLANNING APP.txt (this file)
+
+Discoveries
+===========
+  43. Chaquopy Java-to-Python collection bridging is incomplete: Java Set
+      implementations (LinkedHashMap$LinkedKeySet, TreeSet, etc.) are NOT
+      directly iterable in Python for-loops.  Always use .iterator() +
+      hasNext()/next() pattern for safe cross-language iteration.
+
+  44. org.tukaani:xz is the standard pure Java XZ/LZMA2 library (~130 KB).
+      It provides XZInputStream which wraps any InputStream transparently.
+      Critical for Android since the platform stdlib lacks XZ support.
+      ASTAP .deb databases require it: .deb -> ar -> data.tar.xz -> .1476 files.
+
+  45. Android WebView removes DOM elements during runtime when the first
+      pollStatus() detects platform=android (ASCOM fields, desktop-only UI).
+      Any setTimeout/setInterval callbacks that reference those elements
+      must have null guards, since the elements may not exist by the time
+      the callback fires.
+
+
+================================================================================
+SESSION 13b - Stress Testing + User Guide (WiFi Connection) (2026-03-02)
+================================================================================
+
+Goal
+====
+  Hard stress test all API endpoints on the live Android device to identify
+  runtime errors.  Then write comprehensive user guide documentation for WiFi
+  mount connections (OnStep, SynScan/Sky-Watcher, Celestron NexStar).
+
+Stress Test Results
+===================
+  Tests performed on device RF8M20K2G0K against the live Flask server.
+
+  1. Rapid-fire 50x /api/status:           ALL 200 OK
+  2. Rapid-fire 30x /api/solver/settings:   ALL 200 OK
+  3. Rapid-fire 30x /api/solver/databases:  ALL 200 OK
+  4. 20 concurrent /api/status requests:    ALL 200 OK
+  5. 60x rapid solver settings toggle:      ALL 200 OK
+  6. SSE + concurrent API:                  All stable
+  7. All connection/slew/goto endpoints:    Proper error responses
+  8. Camera/tracking/alignment endpoints:   Proper error responses
+  9. Non-existent routes:                   404 / 405 correctly
+  10. Path traversal attempt (../../):       404 (safe)
+
+Bugs Found During Stress Testing
+=================================
+
+  BUG 4: 500 Internal Server Error on invalid timeout type
+  --------------------------------------------------------
+  Trigger:  POST /api/solver/settings {"timeout":"abc"} or {"timeout":null}
+  Cause:    int("abc") raises ValueError, int(None) raises TypeError.
+            No try/except around the int() conversion at line 1486.
+  Fix:      Wrapped in try/except (ValueError, TypeError), defaults to 120.
+
+  BUG 5: 500 on null JSON values in solver settings
+  --------------------------------------------------
+  Trigger:  POST /api/solver/settings {"mode":null,"cloud_api_key":null}
+  Cause:    str(None) = "None" which is invalid; data.get("timeout", 120)
+            returns None when key is present with null value.
+  Fix:      Explicit None checks before str() / int() conversions.
+
+  BUG 6: Unknown database name accepted for download
+  ---------------------------------------------------
+  Trigger:  POST /api/solver/databases/download {"db_name":"nonexistent"}
+  Cause:    No server-side validation of db_name before delegating to Kotlin.
+            Returns ok:true but Kotlin logs error asynchronously.
+  Fix:      Added whitelist validation: db_name must be in (d05, d20, d50, w08).
+            Returns 400 with descriptive error for invalid names.
+
+Files Modified
+==============
+  - TelescopeController/web_server.py
+    (input validation for solver settings + DB name whitelist)
+  - android app/TelescopeController_UserGuide.html
+    (Complete rewrite of Chapter 2, expanded Chapter 14 + Appendix B)
+  - android app/DEV PLANNING APP.txt (this file)
+
+User Guide Updates
+==================
+  Complete rewrite of Chapter 2 "Connecting to Your Telescope":
+  - Architecture diagram: full communication stack from UI to hardware
+  - OnStep WiFi: AP/STA modes, ESP32 setup, step-by-step connection,
+    auto-detection, OnStep-specific features (native AltAz GoTo, PEC, etc.)
+  - SynScan WiFi: AZ-GTi/EQ6-R/HEQ5 setup, SynScan_XXXX network,
+    port 11882, echo test, NexStar protocol differences
+  - Celestron NexStar: SE/Evolution/AVX/CPC compatibility
+  - LX200 protocol deep dive: position polling, GoTo sequence,
+    manual slew, tracking rate control (with exact command examples)
+  - NexStar protocol deep dive: hex coordinate encoding, motor passthrough,
+    variable-rate tracking, binary time/location commands
+  - USB Serial: FTDI/CP210x/CH340/PL2303 chips, AndroidSerialPort shim
+  - Android Networking: cellular bridge for internet on mount WiFi
+  - Troubleshooting table (7 common problems with solutions)
+  - Updated Chapter 14: SynScan/Celestron added to compatibility table
+  - New Appendix B: NexStar command reference table
+  - Updated footer to reflect multi-mount support
+
+Discoveries
+===========
+  46. Flask silently returns 200 when request.get_json(silent=True)
+      returns None (e.g., no Content-Type header or empty body).
+      The `or {}` fallback means missing fields get defaults, which is
+      actually correct behavior -- POST with no body = "keep defaults".
+
+  47. The NexStar protocol's default TCP port (11882) is defined in
+      mount_protocol.py line 782 (NexStarMountProtocol.default_tcp_port).
+      SynScan WiFi adapters use this port on 192.168.4.1.
+
+   48. The app supports two completely independent protocol families
+       (LX200 text-based and NexStar binary-based) via a clean abstraction
+       in mount_protocol.py.  Both implement the same interface (poll_position,
+       goto_radec, goto_altaz, send_variable_rate_altaz, etc.).
+
+================================================================================
+SESSION: Connection Settings Bug Fix + App Rename + EQ Mount Cleanup
+================================================================================
+
+Todos
+=====
+[✓] Fix connection settings polling overwrite bug (Mode + Protocol + IP + Port)
+[✓] Add immediate backend sync on Mode/Protocol dropdown change
+[✓] Remove all EQ mount references from user manual / help info
+[✓] Rename app to "TrackWise AltAz Pro" (permanent name)
+[✓] Clean build, install on device, copy APK + user manual to Download folder
+
+Changes Made
+============
+1. CONNECTION SETTINGS BUG FIX (web_server.py -- parent source)
+   Root cause: The polling loop (pollStatus) continuously overwrote ALL
+   connection form fields (Mode, Protocol, WiFi IP, WiFi Port, USB Port, Baud)
+   with backend default values every poll cycle. The activeElement guard only
+   prevented overwriting while a field was focused -- the moment the user
+   tapped the next field, the previous one reverted to backend defaults
+   (USB, lx200, 192.168.0.1, 9999).
+
+   Fix (3 parts):
+   a) Wrapped the entire connection field sync block in `if (connected) { ... }`
+      so polling NEVER touches connection config fields while disconnected.
+      The user has full control of the form while configuring.
+      (web_server.py ~line 4226)
+
+   b) Split onConnTypeChange() into:
+      - updateConnTypeUI(): pure display toggle (show/hide USB vs WiFi fields),
+        safe for polling and auto-connect restore to call.
+      - onConnTypeChange(): calls updateConnTypeUI() then immediately POSTs
+        { type: value } to /api/connection/settings so backend stays in sync.
+      (web_server.py ~line 4669)
+
+   c) Updated onProtocolChange() to immediately POST { protocol, wifi_port }
+      to /api/connection/settings when the user selects a protocol.
+      (web_server.py ~line 4683)
+
+   d) Changed checkAutoConnect() restore to call updateConnTypeUI() instead
+      of onConnTypeChange() to avoid a spurious backend POST on startup.
+      (web_server.py ~line 4611)
+
+2. EQ MOUNT REFERENCES REMOVED (UserGuide HTML -- both root and source copies)
+   The app only handles Alt-Az mounts. Removed all equatorial mount references
+   from user-facing documentation:
+   - Hero subtitle & footer: "Alt-Azimuth & Equatorial" -> "Alt-Azimuth"
+   - LX200 compatible list: removed iOptron, Losmandy Gemini, 10Micron, EQMOD/EQMac
+   - Celestron mount list: removed AVX, CGE, CGEM DX (kept SE, Evolution, CPC)
+   - SynScan mount list: removed EQ6-R, HEQ5, Star Adventurer GTi (kept AZ-GTi, Virtuoso)
+   - Hardware compat table: removed iOptron, Losmandy Gemini, 10Micron rows
+   - RMS error guidance: removed "Check polar alignment (for EQ)" reference
+   - PWA manifest description: removed "EQ Mount" from description
+   Note: Internal protocol code (model ID tables in mount_protocol.py, equatorial
+   coordinate math in lx200_protocol.py / realtime_tracking.py / catalog_loader.py)
+   was NOT changed -- those are needed for Alt-Az operation (RA/Dec coordinates).
+
+3. APP RENAMED TO "TrackWise AltAz Pro" (permanent name)
+   Updated in all user-visible locations:
+   - AndroidManifest.xml: android:label
+   - activity_main.xml: splash screen text
+   - TelescopeService.kt: foreground notification title
+   - MainActivity.kt: download description
+   - web_server.py (parent source): PWA name, short_name, description,
+     HTML <title>, header <h1>, version subtitle
+   - TelescopeController_UserGuide.html (both copies): title, CSS comment,
+     hero heading, version line, launch instruction, SynScan instruction, footer
+   - HEADLESS_SERVER.py (parent source): argparse description, startup banner
+   - lx200_protocol.py (parent source): product name response
+   - weather_service.py (parent source): HTTP User-Agent header
+   Note: Package name (com.telescopecontroller), applicationId, Gradle project
+   name, theme style name, and Java/Kotlin package declarations were NOT changed
+   to avoid breaking the build system.
+
+Discoveries
+===========
+   49. The build system has a syncPythonSources Gradle Sync task (build.gradle.kts
+       line 137-156) that copies Python files FROM the parent TelescopeController/
+       directory INTO app/src/main/python/ before every build. This means the
+       parent directory files are the source of truth for all shared Python modules.
+       Editing app/src/main/python/*.py directly is futile -- changes get overwritten
+       on the next build. Always edit the parent copies.
+
+   50. The UserGuide HTML is synced from the android app root directory
+       (TelescopeController_UserGuide.html) into src/main/python/ by the same
+       syncPythonSources task (build.gradle.kts line 147-149).
+
+   51. The activeElement check on <select> elements does not work reliably on
+       Android WebView. When the user taps a native dropdown picker, selects a
+       value, and the picker closes, the <select> may no longer be the active
+       element. The next poll cycle then overwrites the value. The proper fix is
+       to either (a) not poll-sync those fields when disconnected, or (b) push
+       changes to the backend immediately on user interaction.
+
+   52. A clean build (gradlew clean assembleDebug) is required after editing
+       parent Python sources to ensure syncPythonSources copies fresh files.
+       An incremental build may use cached assets from the previous build.

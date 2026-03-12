@@ -1,0 +1,31 @@
+# Build outputs
+app/build/
+build/
+.gradle/
+*.apk
+*.aab
+
+# Signing keys
+*.jks
+*.keystore
+
+# Local config (SDK paths)
+local.properties
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.idea/
+*.iml
+
+# OS junk
+.DS_Store
+Thumbs.db
+nul
+
+# Misc
+*.log

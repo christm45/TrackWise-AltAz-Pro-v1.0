@@ -1,0 +1,53 @@
+{
+  "location": {
+    "latitude": 48.8566,
+    "longitude": 2.3522,
+    "utc_offset": 1
+  },
+  "telescope": {
+    "connection_type": "USB",
+    "usb_port": "COM1",
+    "usb_baudrate": 9600,
+    "wifi_ip": "192.168.0.1",
+    "wifi_port": 9999
+  },
+  "astap": {
+    "path": "C:\\Program Files\\astap\\astap.exe",
+    "solve_interval": 4.0,
+    "downsample": 8,
+    "search_radius": 10.0,
+    "timeout": 5.0
+  },
+  "auto_solve": {
+    "mode": "manual",
+    "camera_index": 0,
+    "watch_folder": "",
+    "save_images": false,
+    "save_folder": "",
+    "save_format": "fits"
+  },
+  "ascom_camera": {
+    "camera_id": "",
+    "camera_name": "No camera selected",
+    "exposure": 0.5,
+    "gain": 100,
+    "binning": 2
+  },
+  "tracking": {
+    "plate_solve_interval": 4.0,
+    "correction_interval": 0.2,
+    "enable_kalman": true,
+    "enable_ml": true
+  },
+  "ui": {
+    "window_width": 1100,
+    "window_height": 750,
+    "theme": "dark"
+  },
+  "logging": {
+    "file_enabled": true,
+    "file_path": "telescope_app.log",
+    "max_file_size_mb": 10,
+    "backup_count": 5
+  }
+}

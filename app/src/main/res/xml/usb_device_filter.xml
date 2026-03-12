@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- USB serial adapters commonly used with telescope mounts -->
+
+    <!-- FTDI FT232R / FT2232H (most common telescope cable chip) -->
+    <usb-device vendor-id="1027" />
+
+    <!-- Silicon Labs CP210x (OnStep, some Celestron) -->
+    <usb-device vendor-id="4292" />
+
+    <!-- WCH CH340/CH341 (cheap Arduino-based controllers) -->
+    <usb-device vendor-id="6790" />
+
+    <!-- Prolific PL2303 (older serial cables) -->
+    <usb-device vendor-id="1659" />
+
+    <!-- ZWO ASI cameras (vendor ID: 0x03C3 = 963) -->
+    <usb-device vendor-id="963" />
+
+    <!-- QHYCCD cameras (vendor ID: 0x1618 = 5656) -->
+    <usb-device vendor-id="5656" />
+
+    <!-- Generic UVC cameras (class 14 = video, subclass 1 = control) -->
+    <!-- Note: Android matches UVC cameras by class, not vendor ID -->
+</resources>
