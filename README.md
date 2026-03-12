@@ -39,6 +39,23 @@ Android App (Kotlin)
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Main Control](screenshots/01_main_control.png) | ![Sky Chart](screenshots/02_slew_control.png) |
+| Position display, coordinates, sky chart with scope overlay | Interactive sky chart with constellations, DSOs, planets |
+| ![Camera Tab](screenshots/03_camera_tab.png) | ![Sky Chart Object](screenshots/03_sky_chart_object.png) |
+| Live camera view with focus control | Tap-to-GoTo: select any object on the sky chart |
+| ![Tracking & PEC](screenshots/04_tracking_pec.png) | ![Tracking Tab](screenshots/05_tracking_tab.png) |
+| PEC, flexure learning, mount PEC (OnStepX) | Plate solving, tracking controls, drift/RMS display |
+| ![Settings](screenshots/06_settings_tab.png) | ![Settings Extended](screenshots/07_settings_scrolled.png) |
+| Connection, protocol selection, slew controls | Auto plate solve, mount drive & PEC configuration |
+| ![Extended Features](screenshots/08_settings_extended.png) | ![More Settings](screenshots/09_settings_more.png) |
+| OnStep/NexStar extended features (backlash, limits, firmware) | Star alignment, location, weather integration |
+
+---
+
 ## Features
 
 ### Telescope Control
