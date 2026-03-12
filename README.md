@@ -1,3 +1,6 @@
+ANDROID APK APPLICATION AND USER GUIDE HERE:
+https://mega.nz/folder/2oogUbYY#ecUwWwXyywuhZNYOKDAr9Q
+
 # TrackWise AltAz Pro
 
 **Advanced Android telescope controller for Alt-Azimuth mounts**
