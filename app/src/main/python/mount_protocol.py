@@ -385,12 +385,6 @@ class MountProtocol(ABC):
         """Get firmware product name, version, and mount type."""
         return {}
 
-    # --- Pier side (optional) --------------------------------------
-
-    def get_pier_side(self, send_fn: SendFn) -> Optional[str]:
-        """Get pier side: 'East', 'West', or None if unknown/unsupported."""
-        return None
-
     # --- Reticle / LED control (optional) --------------------------
 
     def reticle_brighter(self, send_fn: SendFn) -> None:
@@ -400,18 +394,6 @@ class MountProtocol(ABC):
     def reticle_dimmer(self, send_fn: SendFn) -> None:
         """Decrease reticle/LED brightness."""
         pass
-
-    # --- Meridian limits (optional, GEM mounts) --------------------
-
-    def set_meridian_limit_east(self, minutes: int,
-                                send_fn: SendFn) -> CommandResult:
-        """Set east meridian limit in minutes past the meridian."""
-        return CommandResult(True, "Meridian limits not supported")
-
-    def set_meridian_limit_west(self, minutes: int,
-                                send_fn: SendFn) -> CommandResult:
-        """Set west meridian limit in minutes past the meridian."""
-        return CommandResult(True, "Meridian limits not supported")
 
     # --- Alignment / Pointing state (optional) ---------------------
 
@@ -1281,9 +1263,6 @@ class LX200MountProtocol(MountProtocol):
     #   :SoDD#  -- Set overhead limit (returns 0/1)
     #   :Gh#    -- Get horizon limit (returns sDD*#)
     #   :Go#    -- Get overhead limit (returns DD*#)
-    #   :SXE9,n#-- Set east meridian limit in minutes (returns 0/1)
-    #   :SXEA,n#-- Set west meridian limit in minutes (returns 0/1)
-
     def set_backlash(self, axis: str, value: int,
                      send_fn: SendFn) -> CommandResult:
         if axis.lower() in ('ra', 'azm'):
@@ -1436,13 +1415,6 @@ class LX200MountProtocol(MountProtocol):
                     info['mount_type'] = 'Alt-Alt'
                 elif 'A' in body:
                     info['mount_type'] = 'Alt-Azimuth'
-                # Pier side: T=East, W=West, o=None
-                if 'W' in body:
-                    info['pier_side'] = 'West'
-                elif 'T' in body:
-                    info['pier_side'] = 'East'
-                elif 'o' in body:
-                    info['pier_side'] = 'None'
                 # Park state: p=not parked, P=parked, I=parking, F=failed
                 if 'P' in body and 'p' not in body:
                     info['park_state'] = 'Parked'
@@ -1486,24 +1458,6 @@ class LX200MountProtocol(MountProtocol):
             pass
         return info
 
-    # --- Pier side (OnStepX :GU#) ----------------------------------
-
-    def get_pier_side(self, send_fn: SendFn) -> Optional[str]:
-        """Get pier side from :GU# flags: T=East, W=West, o=None."""
-        try:
-            resp = send_fn(":GU#")
-            if resp:
-                body = resp.rstrip('#').strip()
-                if 'W' in body:
-                    return 'West'
-                elif 'T' in body:
-                    return 'East'
-                elif 'o' in body:
-                    return 'None'
-        except Exception:
-            pass
-        return None
-
     # --- Reticle / LED control (LX200 :B+# / :B-#) ----------------
 
     def reticle_brighter(self, send_fn: SendFn) -> None:
@@ -1519,22 +1473,6 @@ class LX200MountProtocol(MountProtocol):
             send_fn(":B-#")
         except Exception:
             pass
-
-    # --- Meridian limits (OnStepX :SXE9 / :SXEA) ------------------
-
-    def set_meridian_limit_east(self, minutes: int,
-                                send_fn: SendFn) -> CommandResult:
-        """Set east meridian limit in minutes (:SXE9,n#)."""
-        resp = send_fn(f":SXE9,{minutes}#")
-        ok = resp and '1' in resp
-        return CommandResult(ok, f"East meridian limit set to {minutes} min" if ok else f"Failed: {resp}")
-
-    def set_meridian_limit_west(self, minutes: int,
-                                send_fn: SendFn) -> CommandResult:
-        """Set west meridian limit in minutes (:SXEA,n#)."""
-        resp = send_fn(f":SXEA,{minutes}#")
-        ok = resp and '1' in resp
-        return CommandResult(ok, f"West meridian limit set to {minutes} min" if ok else f"Failed: {resp}")
 
     # --- Command formatting ----------------------------------------
 

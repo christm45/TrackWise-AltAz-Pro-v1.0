@@ -1963,6 +1963,200 @@ Discoveries
        to either (a) not poll-sync those fields when disconnected, or (b) push
        changes to the backend immediately on user interaction.
 
-   52. A clean build (gradlew clean assembleDebug) is required after editing
-       parent Python sources to ensure syncPythonSources copies fresh files.
-       An incremental build may use cached assets from the previous build.
+    52. A clean build (gradlew clean assembleDebug) is required after editing
+        parent Python sources to ensure syncPythonSources copies fresh files.
+        An incremental build may use cached assets from the previous build.
+
+
+================================================================================
+SESSION: March 12, 2026 — GUI Enhancements Round 2 + Cleanup
+================================================================================
+
+Todos
+=====
+[✓] Bundle Chart.js locally — serve from Flask as static asset
+[✓] Pixel size calculator for non-ZWO cameras
+[✓] Phone camera sensor detection via Android Camera2 API
+[✓] Reorder Camera tab-content in HTML for cleaner source order
+[✓] Initialize git repo and make initial commit
+[✓] Rebuild APK, copy to device, install
+[✓] Update User Guide to v2.0 with all new features
+[✓] Copy User Guide to device Downloads folder
+[✓] Add Az to persistent status strip
+[✓] Remove meridian limits (GEM) from GUI and all backend code
+[✓] Remove pier side display from GUI and all backend code
+[✓] Rebuild APK, reinstall, push updated user guide
+
+Accomplished
+============
+
+1. Chart.js Bundled Locally (Offline Telemetry Charts)
+   - Downloaded chart.umd.min.js v4.4.7 (206KB) to app/src/main/python/
+   - Added Flask route /static/chart.umd.min.js to serve it
+   - Added send_file to top-level Flask import
+   - Script tag now loads local first, CDN as fallback, then no-op stub
+   - Charts work on telescope WiFi with no internet
+   Files changed:
+     - web_server.py: import line 41, new route after line 1041, script tag at ~line 3383
+
+2. Pixel Size Calculator for Non-ZWO Cameras
+   - Added collapsible <details> "Sensor Width Calculator" below the solver
+     optics section in the HTML
+   - Two inputs: resolution (width in px) and pixel size (µm)
+   - Live formula preview: "sensor_width = 4656 × 3.76 / 1000 = 17.51 mm"
+   - "Apply" button fills solver-sensor-width field and triggers FOV update
+   - Added calcSensorWidth() and applySensorCalc() JS functions
+   Files changed:
+     - web_server.py: HTML after line ~5342, JS after updateFovPreview()
+
+3. Phone Camera Sensor Detection (Android Camera2 API)
+   - Added getPhoneSensorInfo() to CameraManager.kt
+     - Queries SENSOR_INFO_PHYSICAL_SIZE for rear camera
+     - Returns width_mm, height_mm, pixel_size_um, resolution_x, resolution_y
+     - Added SizeF import
+   - Added get_phone_sensor_info() to camera_bridge.py
+     - Calls _camera_manager.getPhoneSensorInfo() via Chaquopy bridge
+   - Added /api/camera/phone/sensor Flask endpoint in web_server.py
+   - JavaScript auto-populates solver sensor width when phone camera starts
+     streaming (if field is empty/zero), shows toast with detected values
+   Files changed:
+     - CameraManager.kt: import line 26, new method after getActiveSourceName()
+     - camera_bridge.py: new function before get_asi_camera_info()
+     - web_server.py: new API route after ASI status endpoint, JS in camStart()
+
+4. HTML Source Order Cleaned Up
+   - Moved tab-camera (Live Camera View + Focus Control) from between
+     tab-weather and tab-log to between tab-goto and tab-tracking
+   - Source order now matches bottom nav groupings:
+     Control: tab-control (4409), tab-skychart (4634), tab-goto (4664)
+     Imaging: tab-camera (4706)
+     Tracking: tab-tracking (4831), tab-telemetry (5123)
+     Settings: tab-weather (5341), tab-log (5560), tab-help (5603)
+   - Added section separator comments in HTML
+   Files changed:
+     - web_server.py: moved ~120 lines of HTML
+
+5. Git Repository Initialized
+   - Created .gitignore excluding: build/, *.jks, local.properties, *.apk,
+     __pycache__/, .idea/, *.log, nul, Thumbs.db
+   - Initialized git at android app/android app/
+   - Initial commit b1b0773: 139 files, 154,425 lines
+   - Identity: christm45 <cbv.bogdan@gmail.com>
+   Files created:
+     - .gitignore
+
+6. User Guide Updated to v2.0
+   - Updated version to v2.0 in hero, CSS comment, and footer
+   - Updated section 5.8: added Night Vision (Red) Mode documentation
+   - Updated section 7 (Optics/FOV): added Sensor Auto-Detection and
+     Sensor Width Calculator documentation
+   - Added section 4.7: Recent Targets (renumbered Solar System to 4.8)
+   - Added new Chapter 18: UI & Accessibility Enhancements with 8 subsections:
+     18.1 Bottom Navigation Bar
+     18.2 Night Vision (Red) Mode
+     18.3 Emergency Stop Button
+     18.4 Recent Targets
+     18.5 Accessibility Features (Large Text, High Contrast)
+     18.6 Sensor Width Auto-Detection
+     18.7 Offline Telemetry Charts
+     18.8 Other UI Improvements
+   - TOC updated with all new entries
+   - Removed all meridian/pier references:
+     - Section 15.7: removed Meridian East/West rows from limits table
+     - Section 15.9: renamed from "Firmware Info, Pier Side & Reticle" to
+       "Firmware Info & Reticle", removed pier side paragraph, removed E=GEM
+     - API reference: removed /api/mount/meridian row
+     - Status API description: removed pier_side field
+     - LX200 Appendix: removed :SXE9/:SXEA command row
+   Files changed:
+     - TelescopeController_UserGuide.html (in app/src/main/python/ and root copy)
+
+7. Az Added to Persistent Status Strip
+   - Status strip now shows: RA | Dec | Alt | Az | Tracking | RMS
+   - Added ss-az HTML element between Alt and Tracking dividers
+   - JS reads from p-az element on each poll cycle
+   Files changed:
+     - web_server.py: HTML status-strip div, JS pollStatus override
+
+8. Meridian Limits & Pier Side Removed (Alt-Az Only App)
+   Comprehensive removal across 4 files:
+
+   web_server.py:
+   - Removed meridian limits GUI (East/West inputs + Set buttons) from
+     Mount Limits card
+   - Removed pier side display ("Pier: --") from Park/Home card
+   - Removed pier_side from /api/status response (onstep object)
+   - Removed /api/mount/meridian POST endpoint (15 lines)
+   - Removed setMeridian() JS function (7 lines)
+   - Removed pier-side JS update in poll cycle
+
+   HEADLESS_SERVER.py:
+   - Removed pier_side_var HeadlessVar state variable
+   - Removed _set_meridian_limit() method (15 lines)
+   - Removed pier side extraction from _query_firmware_info() (3 lines)
+   - Removed pier side extraction from _poll_onstep_status() (3 lines)
+
+   mount_protocol.py:
+   - Removed get_pier_side() base class method (4 lines)
+   - Removed set_meridian_limit_east() base class method (3 lines)
+   - Removed set_meridian_limit_west() base class method (3 lines)
+   - Removed OnStepX get_pier_side() implementation (17 lines)
+   - Removed OnStepX set_meridian_limit_east() implementation (6 lines)
+   - Removed OnStepX set_meridian_limit_west() implementation (6 lines)
+   - Removed pier side extraction from :GU# flag parsing (7 lines)
+   - Removed :SXE9/:SXEA command reference comments (2 lines)
+
+   TelescopeController_UserGuide.html:
+   - Updated as described in item 6 above
+
+Discoveries
+===========
+   53. Chart.js v4.4.7 UMD bundle is 206KB. Bundling it as a Python-directory
+       file served via Flask /static/ route works because Chaquopy packages all
+       files in app/src/main/python/ into the APK assets. The Flask route reads
+       the file with send_file() at runtime.
+
+   54. Android Camera2 API provides SENSOR_INFO_PHYSICAL_SIZE (SizeF in mm) and
+       SENSOR_INFO_ACTIVE_ARRAY_SIZE (Rect in px) via CameraCharacteristics. This
+       gives the physical sensor dimensions needed for FOV calculation without
+       requiring a lookup table. Pixel size can be derived: pixelSize_um =
+       (width_mm / resolution_x) * 1000.
+
+   55. The pier_side and meridian limit code was entirely GEM-specific (German
+       Equatorial Mount). For an Alt-Az-only app, this code was dead weight:
+       - Alt-Az mounts always report pier_side = 'None' (or 'o' flag in :GU#)
+       - Meridian limits (:SXE9/:SXEA) are only meaningful for GEM tracking
+         past the meridian (pier flip management)
+       - No other code in the app depended on pier_side or meridian values
+
+   56. The MSYS_NO_PATHCONV=1 environment variable is required when running adb
+       push/pull with /sdcard/ paths from Git Bash on Windows. Without it, Git
+       Bash's POSIX path conversion rewrites /sdcard/Download/ to
+       C:/Program Files/Git/sdcard/Download/ which fails.
+
+   57. The HTML tab-content divs do not need to be in any particular order for
+       the JS tab-switching to work (it uses display:none/block by ID). But
+       grouping them by bottom nav section makes the source code much more
+       maintainable.
+
+Relevant Files Changed This Session
+====================================
+   Edited:
+   - web_server.py — Chart.js bundling, pixel calculator, phone sensor API,
+     Az in status strip, meridian/pier removal, HTML reorder (~50 lines net change)
+   - HEADLESS_SERVER.py — pier_side_var and meridian limit removal (~25 lines removed)
+   - mount_protocol.py — pier side and meridian methods removal (~60 lines removed)
+   - CameraManager.kt — getPhoneSensorInfo() method (+50 lines), SizeF import
+   - camera_bridge.py — get_phone_sensor_info() function (+27 lines)
+   - TelescopeController_UserGuide.html — v2.0 update, Chapter 18, meridian cleanup
+
+   Created:
+   - .gitignore — standard Android/Python exclusions
+   - chart.umd.min.js — bundled Chart.js v4.4.7 (206KB)
+
+   APK: Rebuilt and installed twice during session
+   - First build: all 5 improvements (Chart.js, calculator, phone sensor, reorder, git)
+   - Second build: Az in status strip + meridian/pier removal
+   - Final install timestamp: 2026-03-12 20:57:26
+   - APK also copied to /sdcard/Download/TrackWise-AltAzPro.apk
+   - User Guide copied to /sdcard/Download/TelescopeController_UserGuide.html

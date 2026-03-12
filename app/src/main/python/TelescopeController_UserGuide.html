@@ -10,7 +10,7 @@
 <style>
 /* ================================================================
    TrackWise AltAz Pro - User Guide — Enhanced Visual Theme
-   v1.0 by CRACIUN BOGDAN
+   v2.0 by CRACIUN BOGDAN
    ================================================================ */
 
 /* --- CSS Variables --- */
@@ -346,7 +346,7 @@ body.in-iframe .iframe-top-btn{display:flex}
 <div class="hero">
   <h1>TrackWise AltAz Pro</h1>
   <p>Complete User Guide - Android App</p>
-  <div class="version">by CRACIUN BOGDAN</div>
+  <div class="version">v2.0 &mdash; by CRACIUN BOGDAN</div>
   <div class="version" style="margin-top:4px;color:#888">For Alt-Azimuth Mounts (OnStep, SynScan, Celestron, Meade)</div>
 </div>
 
@@ -424,6 +424,14 @@ body.in-iframe .iframe-top-btn{display:flex}
     <li><a href="#ch15-firmware" data-section="ch15-firmware" class="sub-link">Firmware Info</a></li>
     <li><a href="#ch16" data-section="ch16">&#128736;&#65039; 16. Troubleshooting</a></li>
     <li><a href="#ch17" data-section="ch17">&#128187; 17. Hardware</a></li>
+    <li><a href="#ch18" data-section="ch18">&#127912; 18. UI &amp; Accessibility</a></li>
+    <li><a href="#ch18-nav" data-section="ch18-nav" class="sub-link">Bottom Navigation</a></li>
+    <li><a href="#ch18-night" data-section="ch18-night" class="sub-link">Night Vision Mode</a></li>
+    <li><a href="#ch18-estop" data-section="ch18-estop" class="sub-link">Emergency Stop Button</a></li>
+    <li><a href="#ch18-recent" data-section="ch18-recent" class="sub-link">Recent Targets</a></li>
+    <li><a href="#ch18-access" data-section="ch18-access" class="sub-link">Accessibility</a></li>
+    <li><a href="#ch18-sensor" data-section="ch18-sensor" class="sub-link">Sensor Auto-Detection</a></li>
+    <li><a href="#ch18-offline" data-section="ch18-offline" class="sub-link">Offline Charts</a></li>
     <li><a href="#appendix-a" data-section="appendix-a" class="sub-link">Appendix A: LX200</a></li>
     <li><a href="#appendix-b" data-section="appendix-b" class="sub-link">Appendix B: NexStar</a></li>
   </ul>
@@ -1380,8 +1388,18 @@ Position Update Flow:
   <li>Tap <span class="badge badge-green">GoTo</span></li>
 </ol>
 
-<!-- 4.7 Solar System Ephemeris -->
-<h3 id="ch4-solar">4.7 Solar System Ephemeris Engine</h3>
+<!-- 4.7 Recent Targets -->
+<h3 id="ch4-recent">4.7 Recent Targets</h3>
+<p>The app automatically records every successful GoTo command in a <strong>Recent Targets</strong> list (last 10 targets, persisted to localStorage). This lets you quickly re-slew to objects you visited earlier in the session without searching the catalog again.</p>
+<ul>
+  <li>The list appears at the bottom of the GoTo tab</li>
+  <li>Each entry shows the object name, coordinates, and timestamp</li>
+  <li>Tap any entry to instantly re-slew to that target</li>
+  <li>The list persists across app restarts (stored in the browser&rsquo;s localStorage)</li>
+</ul>
+
+<!-- 4.8 Solar System Ephemeris -->
+<h3 id="ch4-solar">4.8 Solar System Ephemeris Engine</h3>
 <p>Solar system objects are computed in real time using low-precision algorithms from Jean Meeus' <em>Astronomical Algorithms</em>:</p>
 
 <table>
@@ -1639,7 +1657,7 @@ Position Update Flow:
 </ul>
 
 <!-- 5.8 Theme Toggle -->
-<h3 id="ch5-theme">5.8 Light / Dark Theme</h3>
+<h3 id="ch5-theme">5.8 Light / Dark Theme &amp; Night Vision</h3>
 <p>The app defaults to a dark astronomy-friendly theme (dark background, dim orange/blue accents) to preserve night vision. For daytime use or indoor testing, toggle to <strong>light mode</strong>:</p>
 
 <ol>
@@ -1648,7 +1666,18 @@ Position Update Flow:
   <li>The entire UI switches between dark and light colour schemes</li>
 </ol>
 
-<div class="note">In dark mode, the animated starfield background is visible. In light mode, the starfield is hidden and the background switches to a neutral white/grey. The toggle state is not persisted &mdash; the app always starts in dark mode.</div>
+<h4>Night Vision (Red) Mode</h4>
+<p>For full dark-adaptation preservation, the app includes a dedicated <strong>Night Vision mode</strong> that converts the entire UI to red-only illumination &mdash; no blues, whites, or greens that could damage your scotopic vision.</p>
+<ol>
+  <li>Tap the toolbar button (bottom-right)</li>
+  <li>Tap the moon/crescent icon (&#127769;)</li>
+  <li>All UI elements switch to deep red tones with a dimming overlay</li>
+</ol>
+<p>Night vision mode affects everything: cards, buttons, inputs, badges, toasts, navigation, log entries, and charts. The setting is persisted to localStorage &mdash; it remembers your choice across sessions.</p>
+
+<div class="tip"><strong>Best practice:</strong> Enable night vision mode 20&ndash;30 minutes before your session starts to maintain dark adaptation. Even a brief flash of white light from a phone screen can reset your eyes for up to 30 minutes.</div>
+
+<div class="note">In dark mode, the animated starfield background is visible. In light mode, the starfield is hidden and the background switches to a neutral white/grey. Night vision mode works independently and can be combined with either theme.</div>
 
 <!-- 5.9 API Reference for Controls -->
 <h3 id="ch5-api">5.9 Controls API Reference</h3>
@@ -2046,6 +2075,23 @@ dramatically improves plate-solve speed and reliability. Without this, the solve
   <tr><td>Canon APS-C (700D, 80D...)</td><td>22.3</td></tr>
   <tr><td>Typical phone camera</td><td>4.5 &ndash; 7.0</td></tr>
 </table>
+
+<h4>Automatic Sensor Detection</h4>
+<p>The app can <strong>automatically detect</strong> sensor dimensions for supported cameras:</p>
+<ul>
+  <li><strong>ZWO ASI cameras</strong> &mdash; When a ZWO camera connects via the ASI SDK, the app reads <code>pixelSize</code>, <code>maxWidth</code>, and <code>maxHeight</code> from the camera firmware and auto-populates the sensor width field. A toast notification confirms the detected values.</li>
+  <li><strong>Phone camera</strong> &mdash; When you start the phone camera for plate solving, the app queries Android&rsquo;s <code>Camera2 SENSOR_INFO_PHYSICAL_SIZE</code> API to get the rear camera sensor dimensions in mm. This is also auto-populated if the field is empty.</li>
+</ul>
+<p>Auto-detection only fills the field if it is currently empty or zero &mdash; it will not overwrite a value you entered manually.</p>
+
+<h4>Sensor Width Calculator</h4>
+<p>For cameras where auto-detection is not available (ASCOM cameras, generic USB webcams), the app includes a built-in <strong>Sensor Width Calculator</strong>. Expand it below the sensor width input field:</p>
+<ol>
+  <li>Enter your camera&rsquo;s horizontal resolution in pixels (from the spec sheet, e.g., <code>4656</code>)</li>
+  <li>Enter the pixel size in micrometres (e.g., <code>3.76</code> &micro;m)</li>
+  <li>The calculator shows: <code>sensor_width = 4656 &times; 3.76 / 1000 = 17.51 mm</code></li>
+  <li>Tap <strong>Apply</strong> to fill the sensor width field and update the FOV preview</li>
+</ol>
 
 <div class="note"><strong>Tip:</strong> After your first successful solve, the tracking card shows
 <strong>Solved FOV</strong> (e.g., &ldquo;1.34&deg;&rdquo;). If it differs wildly from the calculated FOV, double-check
@@ -4925,15 +4971,13 @@ with the worm rotation phase. See <a href="#ch8-pec" style="color:var(--accent)"
 
 <!-- 15.7 Mount Limits -->
 <h3 id="ch15-limits">15.7 Mount Limits Configuration</h3>
-<p>The <strong>Mount Limits</strong> card configures the altitude bounds and meridian limits enforced by the mount controller:</p>
+<p>The <strong>Mount Limits</strong> card configures the altitude bounds enforced by the mount controller:</p>
 <table>
   <tr><th>Limit</th><th>Command</th><th>Range</th><th>Description</th></tr>
   <tr><td><strong>Horizon</strong></td><td><code>:Sh{sDeg}#</code></td><td>-30&deg; to +30&deg;</td><td>Minimum altitude &mdash; the mount refuses to slew below this</td></tr>
-  <tr><td><strong>Overhead</strong></td><td><code>:So{Deg}#</code></td><td>60&deg; to 91&deg;</td><td>Maximum altitude &mdash; prevents flipping near zenith</td></tr>
-  <tr><td><strong>Meridian East</strong></td><td><code>:SXE9,{min}#</code></td><td>&ge;0 min</td><td>How far past the meridian the mount can track (GEM east side)</td></tr>
-  <tr><td><strong>Meridian West</strong></td><td><code>:SXEA,{min}#</code></td><td>&ge;0 min</td><td>How far past the meridian the mount can track (GEM west side)</td></tr>
+  <tr><td><strong>Overhead</strong></td><td><code>:So{Deg}#</code></td><td>60&deg; to 91&deg;</td><td>Maximum altitude &mdash; prevents tracking through the zenith</td></tr>
 </table>
-<p>Current horizon and overhead limits are queried automatically on connect via <code>:Gh#</code> and <code>:Go#</code>. Meridian limits are primarily relevant for German Equatorial Mounts (GEM) and are ignored on Alt-Az mounts.</p>
+<p>Current horizon and overhead limits are queried automatically on connect via <code>:Gh#</code> and <code>:Go#</code>.</p>
 
 <!-- 15.8 Auxiliary Features -->
 <h3 id="ch15-aux">15.8 Auxiliary Features (Dew Heaters, Fans, LEDs)</h3>
@@ -4952,15 +4996,14 @@ with the worm rotation phase. See <a href="#ch8-pec" style="color:var(--accent)"
   <li><strong>Flat Panel LED</strong> &mdash; brightness control for flat calibration frames</li>
 </ul>
 
-<!-- 15.9 Firmware Info & Pier Side -->
-<h3 id="ch15-firmware">15.9 Firmware Info, Pier Side &amp; Reticle</h3>
+<!-- 15.9 Firmware Info & Reticle -->
+<h3 id="ch15-firmware">15.9 Firmware Info &amp; Reticle</h3>
 <p>The <strong>Firmware</strong> card on the Control tab displays:</p>
 <ul>
   <li><strong>Product name</strong> &mdash; from <code>:GVP#</code> (e.g., "OnStepX")</li>
   <li><strong>Firmware version</strong> &mdash; from <code>:GVN#</code> (e.g., "10.08k")</li>
-  <li><strong>Mount type</strong> &mdash; from <code>:GU#</code> flags: E=GEM, K=Fork, A=Alt-Azm, L=Alt-Alt</li>
+  <li><strong>Mount type</strong> &mdash; from <code>:GU#</code> flags: A=Alt-Azm, K=Fork, L=Alt-Alt</li>
 </ul>
-<p>The <strong>pier side</strong> is displayed in the Park/Home card. It is decoded from the <code>:GU#</code> status flags: <code>T</code> = East, <code>W</code> = West, <code>o</code> = None (Alt-Az mounts always show None).</p>
 <p>The <strong>Reticle / LED</strong> card provides simple brightness control for the mount's built-in reticle illuminator:</p>
 <table>
   <tr><th>Button</th><th>Command</th></tr>
@@ -4985,7 +5028,6 @@ with the worm rotation phase. See <a href="#ch8-pec" style="color:var(--accent)"
   <tr><td><code>/api/mount/pec/save</code></td><td>POST</td><td>&mdash;</td><td>Save PEC to NV memory</td></tr>
   <tr><td><code>/api/mount/backlash</code></td><td>POST</td><td><code>{"axis":"ra|dec","value":100}</code></td><td>Set backlash (arcsec)</td></tr>
   <tr><td><code>/api/mount/limits</code></td><td>POST</td><td><code>{"type":"horizon|overhead","degrees":10}</code></td><td>Set altitude limit</td></tr>
-  <tr><td><code>/api/mount/meridian</code></td><td>POST</td><td><code>{"direction":"east|west","minutes":15}</code></td><td>Set meridian limit</td></tr>
   <tr><td><code>/api/mount/auxiliary/set</code></td><td>POST</td><td><code>{"slot":1,"value":128}</code></td><td>Set auxiliary value</td></tr>
   <tr><td><code>/api/mount/firmware</code></td><td>GET</td><td>&mdash;</td><td>Get firmware info</td></tr>
   <tr><td><code>/api/focuser/goto</code></td><td>POST</td><td><code>{"position":5000}</code></td><td>Focuser go to position</td></tr>
@@ -4998,7 +5040,7 @@ with the worm rotation phase. See <a href="#ch8-pec" style="color:var(--accent)"
   <tr><td><code>/api/reticle/dimmer</code></td><td>POST</td><td>&mdash;</td><td>Decrease reticle brightness</td></tr>
   <tr><td><code>/api/home/find</code></td><td>POST</td><td>&mdash;</td><td>Find home position</td></tr>
 </table>
-<p>The <code>/api/status</code> response now includes an <code>onstep</code> object with all extended state: <code>park_state</code>, <code>tracking_rate</code>, <code>tracking_enabled</code>, <code>pier_side</code>, <code>mount_pec_status</code>, <code>backlash_ra/dec</code>, <code>horizon_limit</code>, <code>overhead_limit</code>, <code>firmware_name/version/mount_type</code>, <code>focuser_temperature/tcf</code>, <code>rotator_angle/status/derotating</code>, and <code>auxiliary_features</code> (array).</p>
+<p>The <code>/api/status</code> response now includes an <code>onstep</code> object with all extended state: <code>park_state</code>, <code>tracking_rate</code>, <code>tracking_enabled</code>, <code>mount_pec_status</code>, <code>backlash_ra/dec</code>, <code>horizon_limit</code>, <code>overhead_limit</code>, <code>firmware_name/version/mount_type</code>, <code>focuser_temperature/tcf</code>, <code>rotator_angle/status/derotating</code>, and <code>auxiliary_features</code> (array).</p>
 
 <hr class="divider">
 
@@ -5418,6 +5460,86 @@ may not be available depending on the mount's firmware capabilities.</div>
 
 <hr class="divider">
 
+<!-- CHAPTER 18: UI & Accessibility Enhancements -->
+<h2 id="ch18">&#127912; 18. UI &amp; Accessibility Enhancements</h2>
+
+<p>Version 2.0 introduces a comprehensive set of UI/UX improvements designed for ergonomic outdoor use, night-time observing, and accessibility. These features are in addition to the core telescope control functionality.</p>
+
+<h3 id="ch18-nav">18.1 Bottom Navigation Bar</h3>
+<p>The app uses a fixed <strong>bottom navigation bar</strong> with four sections for one-handed operation:</p>
+<table>
+  <tr><th>Section</th><th>Icon</th><th>Sub-tabs</th></tr>
+  <tr><td><strong>Control</strong></td><td>Crosshair</td><td>Slew, GoTo, Sky Chart</td></tr>
+  <tr><td><strong>Imaging</strong></td><td>Camera</td><td>Live View</td></tr>
+  <tr><td><strong>Tracking</strong></td><td>Target</td><td>Tracking, Telemetry</td></tr>
+  <tr><td><strong>Settings</strong></td><td>Gear</td><td>Location, Log, Help</td></tr>
+</table>
+<p>Tapping a bottom nav icon shows that section&rsquo;s sub-tabs along the top. Each sub-tab switch includes haptic feedback and auto-scrolls to the top of the content.</p>
+
+<h3 id="ch18-night">18.2 Night Vision (Red) Mode</h3>
+<p>Night vision mode converts the entire UI to <strong>red-only illumination</strong> to preserve dark adaptation. It applies a global CSS class (<code>html.nightmode</code>) that:</p>
+<ul>
+  <li>Replaces all blues, whites, greens, and oranges with deep red hues</li>
+  <li>Adds a dimming overlay to reduce overall brightness</li>
+  <li>Affects all UI elements: cards, buttons, inputs, badges, toasts, navigation, charts, log entries</li>
+  <li>Persists across sessions (stored in localStorage)</li>
+</ul>
+<p><strong>Toggle:</strong> Toolbar &gt; moon/crescent icon (&#127769;)</p>
+
+<h3 id="ch18-estop">18.3 Emergency Stop Button</h3>
+<p>A fixed <strong>red STOP button</strong> (56&times;56 px) is always visible in the bottom-right corner of the screen, above the bottom navigation bar. It is never hidden by tab switches or scrolling.</p>
+<p>When tapped, it:</p>
+<ol>
+  <li>Fires <strong>four stop commands in parallel</strong>: slew stop, focuser stop, derotator stop, rotator stop</li>
+  <li>Triggers a triple haptic vibration pattern (100ms-50ms-100ms-50ms-200ms)</li>
+  <li>Shows a confirmation toast</li>
+</ol>
+<div class="warn">The emergency stop button is your fastest way to halt all telescope motion. Use it immediately if you see a cable snag, impending collision, or any unexpected movement.</div>
+
+<h3 id="ch18-recent">18.4 Recent Targets</h3>
+<p>Every GoTo command is automatically recorded in a <strong>Recent Targets</strong> list (last 10 targets). The list appears at the bottom of the GoTo tab and shows object name, coordinates, and timestamp. Tap any entry to instantly re-slew. Data persists across sessions via localStorage.</p>
+
+<h3 id="ch18-access">18.5 Accessibility Features</h3>
+<p>Two accessibility toggles are available from the toolbar:</p>
+<table>
+  <tr><th>Feature</th><th>Toggle</th><th>Effect</th></tr>
+  <tr>
+    <td><strong>Large Text</strong></td>
+    <td>Toolbar &gt; &ldquo;Aa&rdquo; button</td>
+    <td>Increases base font size to 18px (from default ~14px). Applies <code>html.largetext</code> class. Persisted to localStorage.</td>
+  </tr>
+  <tr>
+    <td><strong>High Contrast</strong></td>
+    <td>Toolbar &gt; contrast icon</td>
+    <td>Adds 2px borders to all interactive elements, removes blur effects, uses solid backgrounds. Applies <code>html.highcontrast</code> class. Persisted to localStorage.</td>
+  </tr>
+</table>
+<p>Both features work in combination with dark mode, light mode, and night vision mode.</p>
+
+<h3 id="ch18-sensor">18.6 Sensor Width Auto-Detection</h3>
+<p>The plate solver&rsquo;s Optics / FOV section now supports automatic sensor width detection for:</p>
+<ul>
+  <li><strong>ZWO ASI cameras</strong> &mdash; reads pixel size and resolution from the camera&rsquo;s firmware via the ASI SDK</li>
+  <li><strong>Phone camera</strong> &mdash; queries Android&rsquo;s Camera2 API (<code>SENSOR_INFO_PHYSICAL_SIZE</code>) for the rear camera&rsquo;s physical dimensions</li>
+</ul>
+<p>Auto-detection only fills the sensor width field if it is currently empty or zero. A <strong>Sensor Width Calculator</strong> is also available for manual entry: input resolution (px) and pixel size (&micro;m) and the app computes the physical width in mm.</p>
+<p>See <a href="#ch7-fov" style="color:var(--accent)">Section 7: Optics / FOV Configuration</a> for full details.</p>
+
+<h3 id="ch18-offline">18.7 Offline Telemetry Charts</h3>
+<p>The telemetry charts (tracking error, correction sources) use the Chart.js library. In previous versions, Chart.js was loaded from a CDN which failed when the phone was on telescope WiFi without internet access.</p>
+<p>The app now <strong>bundles Chart.js locally</strong> (served from the Flask backend at <code>/static/chart.umd.min.js</code>). If the local file somehow fails, it falls back to the CDN, and finally to a no-op stub that prevents errors. Charts always work regardless of internet connectivity.</p>
+
+<h3 id="ch18-other">18.8 Other UI Improvements</h3>
+<ul>
+  <li><strong>Larger slew buttons</strong> &mdash; 100&times;90 px with 14px border radius for easier touch targets</li>
+  <li><strong>Persistent status strip</strong> &mdash; Sticky bar below the header showing RA, Dec, Alt, tracking state, and RMS error at a glance</li>
+  <li><strong>Two-column responsive layout</strong> &mdash; On tablets and landscape orientation (768px+), the UI switches to a multi-column grid</li>
+  <li><strong>Camera HUD overlay</strong> &mdash; Full-screen camera view with position data overlay for plate solving</li>
+  <li><strong>Toast repositioning</strong> &mdash; Notifications appear above the bottom nav bar on mobile to avoid overlap</li>
+</ul>
+
+<hr class="divider">
+
 <!-- APPENDIX A: LX200 Commands -->
 <h2 id="appendix-a">Appendix A: LX200 Commands Used</h2>
 <p>These are the LX200 protocol commands the app sends to OnStep and other LX200-compatible mounts:</p>
@@ -5471,7 +5593,6 @@ may not be available depending on the mount's firmware capabilities.</div>
   <tr><td><code>:%BR#/:%BD#</code></td><td>Get Backlash RA/Dec</td><td>n#</td></tr>
   <tr><td><code>:Sh{sDeg}#/:So{Deg}#</code></td><td>Set Horizon/Overhead Limit</td><td>0 or 1</td></tr>
   <tr><td><code>:Gh#/:Go#</code></td><td>Get Horizon/Overhead Limit</td><td>sDD*# / DD*#</td></tr>
-  <tr><td><code>:SXE9,{n}#/:SXEA,{n}#</code></td><td>Set Meridian Limit East/West (min)</td><td>0 or 1</td></tr>
   <tr><td><code>:GXY0#</code></td><td>Get Auxiliary Slot Bitmap</td><td>8-char bitmap#</td></tr>
   <tr><td><code>:GXY{n}#</code></td><td>Get Auxiliary Slot Name/Purpose</td><td>name,purpose#</td></tr>
   <tr><td><code>:GXX{n}#/:SXX{n},V{v}#</code></td><td>Get/Set Auxiliary Slot Value</td><td>value# / 0 or 1</td></tr>
@@ -5516,7 +5637,7 @@ as fractions of a full 360-degree circle. For 32-bit precision:
 <button class="iframe-top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Back to top">&#8679;</button>
 
 <div class="footer">
-  <p>TrackWise AltAz Pro - User Guide</p>
+  <p>TrackWise AltAz Pro v2.0 - User Guide</p>
   <p>by CRACIUN BOGDAN</p>
   <p>For Alt-Azimuth Mounts (OnStep, SynScan, Celestron, Meade)</p>
 </div>

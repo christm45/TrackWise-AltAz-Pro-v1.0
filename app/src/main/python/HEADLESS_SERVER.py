@@ -303,9 +303,6 @@ class HeadlessTelescopeApp:
         self.tracking_rate_var = HeadlessVar("Sidereal")  # 'Sidereal', 'Lunar', 'Solar', 'King'
         self.tracking_enabled_var = HeadlessVar(False)
 
-        # Pier side (GEM mounts)
-        self.pier_side_var = HeadlessVar("--")  # 'East', 'West', 'None', '--'
-
         # Mount-side PEC (OnStep hardware PEC, separate from software PEC)
         self.mount_pec_status_var = HeadlessVar("--")  # Idle/Playing/Recording/Ready etc
         self.mount_pec_recorded_var = HeadlessVar(False)
@@ -1580,22 +1577,6 @@ class HeadlessTelescopeApp:
             if o is not None:
                 self.overhead_limit_var.set(str(o))
 
-    def _set_meridian_limit(self, direction: str, minutes: int):
-        """Set meridian limit: direction='east' or 'west', minutes past meridian."""
-        bridge = self._get_active_bridge()
-        if bridge.is_connected:
-            mp = self.telescope_bridge.mount_protocol
-            if direction == 'east':
-                result = mp.set_meridian_limit_east(minutes, bridge.send_command)
-            else:
-                result = mp.set_meridian_limit_west(minutes, bridge.send_command)
-            if result.success:
-                self._log(f"{direction.capitalize()} meridian limit set to {minutes} min", "success")
-            else:
-                self._log(f"Set meridian limit failed: {result.message}", "error")
-        else:
-            self._log("Cannot set meridian limits: not connected", "warning")
-
     # ------------------------------------------------------------------
     # OnStep Extended: Auxiliary Features
     # ------------------------------------------------------------------
@@ -1691,10 +1672,6 @@ class HeadlessTelescopeApp:
                 rate = info.get('tracking_rate', '')
                 if rate:
                     self.tracking_rate_var.set(rate)
-                # Extract pier side
-                pier = info.get('pier_side', '')
-                if pier:
-                    self.pier_side_var.set(pier)
                 # Extract PEC state
                 pec = info.get('pec_state', '')
                 if pec:
@@ -1945,10 +1922,6 @@ class HeadlessTelescopeApp:
             rate = info.get('tracking_rate', '')
             if rate:
                 self.tracking_rate_var.set(rate)
-            # Pier side
-            pier = info.get('pier_side', '')
-            if pier:
-                self.pier_side_var.set(pier)
             # PEC
             pec = info.get('pec_state', '')
             if pec:

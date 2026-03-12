@@ -245,14 +245,14 @@ class TelescopeWebServer:
             )
             return _orig_server_bind(srv_self)
 
-        BaseWSGIServer.server_bind = _patched_server_bind
+        BaseWSGIServer.server_bind = _patched_server_bind  # type: ignore
         try:
             self._server = make_server(
                 self.host, self.port, self._flask_app, threaded=True
             )
         finally:
             # Restore original to avoid leaking the patch
-            BaseWSGIServer.server_bind = _orig_server_bind
+            BaseWSGIServer.server_bind = _orig_server_bind  # type: ignore
 
         self._thread = threading.Thread(
             target=self._server.serve_forever,
@@ -595,10 +595,6 @@ class TelescopeWebServer:
         te_var = getattr(app, 'tracking_enabled_var', None)
         onstep['tracking_enabled'] = te_var.get() if te_var else False
 
-        # Pier side
-        pier_var = getattr(app, 'pier_side_var', None)
-        onstep['pier_side'] = pier_var.get() if pier_var else '--'
-
         # Mount-side PEC
         mpec_var = getattr(app, 'mount_pec_status_var', None)
         onstep['mount_pec_status'] = mpec_var.get() if mpec_var else '--'
@@ -717,15 +713,15 @@ class TelescopeWebServer:
             return False
         with self._camera_lock:
             import sys
-            backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_V4L2
-            cap = cv2.VideoCapture(index, backend)
+            backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_V4L2  # type: ignore
+            cap = cv2.VideoCapture(index, backend)  # type: ignore
             if not cap.isOpened():
                 # Fallback without explicit backend
-                cap = cv2.VideoCapture(index)
+                cap = cv2.VideoCapture(index)  # type: ignore
             if cap.isOpened():
                 # Set modest resolution for Pi streaming performance
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # type: ignore
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)  # type: ignore
                 self._camera = cap
                 self._camera_index = index
                 self._camera_active = True
@@ -753,7 +749,7 @@ class TelescopeWebServer:
             return False
         with self._camera_lock:
             try:
-                cam = ASCOMCameraCapture()
+                cam = ASCOMCameraCapture()  # type: ignore
                 cam.gain = gain
                 cam.binning = binning
                 cam.on_log = lambda msg: _logger.info("[ASCOM LiveView] %s", msg)
@@ -780,7 +776,7 @@ class TelescopeWebServer:
         them to JPEG, accessible via ``asi_camera.get_jpeg_frame()``.
         """
         try:
-            import asi_camera
+            import asi_camera  # type: ignore[import-not-found]
         except ImportError:
             _logger.warning("asi_camera module not available")
             return False
@@ -824,7 +820,7 @@ class TelescopeWebServer:
             # Close ASI (native SDK)
             if self._camera_source == "asi":
                 try:
-                    import asi_camera
+                    import asi_camera  # type: ignore[import-not-found]
                     asi_camera.close_camera()
                 except Exception:
                     pass
@@ -866,7 +862,7 @@ class TelescopeWebServer:
 
             # Retrieve raw image array (COM SAFEARRAY -> numpy)
             image_data = cam.camera.ImageArray
-            arr = np.array(image_data, dtype=np.uint16)
+            arr = np.array(image_data, dtype=np.uint16)  # type: ignore
             if arr.ndim == 2:
                 arr = arr.T  # ASCOM returns column-major
 
@@ -874,13 +870,13 @@ class TelescopeWebServer:
             arr_min = arr.min()
             arr_max = arr.max()
             if arr_max > arr_min:
-                arr8 = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
+                arr8 = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)  # type: ignore
             else:
-                arr8 = np.zeros(arr.shape, dtype=np.uint8)
+                arr8 = np.zeros(arr.shape, dtype=np.uint8)  # type: ignore
 
             # Encode as JPEG via OpenCV (if available) or PIL
             if _HAS_CV2:
-                ok, buf = cv2.imencode('.jpg', arr8, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                ok, buf = cv2.imencode('.jpg', arr8, [cv2.IMWRITE_JPEG_QUALITY, 80])  # type: ignore
                 if ok:
                     return buf.tobytes()
             else:
@@ -928,7 +924,7 @@ class TelescopeWebServer:
             elif self._camera_source == "asi":
                 # ASI SDK path — frames grabbed by background thread
                 try:
-                    import asi_camera
+                    import asi_camera  # type: ignore[import-not-found]
                     jpeg = asi_camera.get_jpeg_frame()
                 except ImportError:
                     jpeg = None
@@ -954,7 +950,7 @@ class TelescopeWebServer:
                     time.sleep(0.1)
                     continue
                 # Encode as JPEG (quality 70 balances size vs quality for WiFi)
-                ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])  # type: ignore
                 if not ok:
                     time.sleep(0.1)
                     continue
@@ -1730,22 +1726,6 @@ class TelescopeWebServer:
                 "horizon": server.app_ref.horizon_limit_var.get(),
                 "overhead": server.app_ref.overhead_limit_var.get(),
             })
-
-        @flask_app.route("/api/mount/meridian", methods=["POST"])
-        def api_mount_meridian():
-            err = _require_connection()
-            if err:
-                return err
-            data = request.get_json(silent=True) or {}
-            direction = data.get("direction")  # 'east' or 'west'
-            try:
-                minutes = int(data.get("minutes", 0))
-            except (ValueError, TypeError):
-                return jsonify({"ok": False, "error": "Invalid minutes"}), 400
-            if direction not in ("east", "west"):
-                return jsonify({"ok": False, "error": "direction must be 'east' or 'west'"}), 400
-            return _run(lambda: server.app_ref._set_meridian_limit(direction, minutes),
-                        f"Meridian {direction}")
 
         # ============================================================
         # OnStep Extended: Auxiliary Features
@@ -2989,8 +2969,8 @@ class TelescopeWebServer:
             elif server._camera_source == "asi":
                 # ASI SDK: grab latest JPEG from streaming buffer
                 asi = _get_asi_module()
-                if asi and hasattr(asi, '_last_jpeg') and asi._last_jpeg:
-                    jpeg = asi._last_jpeg
+                if asi and hasattr(asi, '_last_jpeg') and asi._last_jpeg:  # type: ignore
+                    jpeg = asi._last_jpeg  # type: ignore
                 elif asi and hasattr(asi, 'capture_for_solving'):
                     jpeg = asi.capture_for_solving()
                 if jpeg is None:
@@ -3005,7 +2985,7 @@ class TelescopeWebServer:
                     ret, frame = server._camera.read()
                 if not ret or frame is None:
                     return "Failed to capture frame", 503
-                ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])  # type: ignore
                 if not ok:
                     return "Encoding failed", 500
                 jpeg = buf.tobytes()
@@ -3079,7 +3059,7 @@ class TelescopeWebServer:
             except ImportError:
                 pass
             try:
-                import asi_camera
+                import asi_camera  # type: ignore[import-not-found]
                 return asi_camera
             except ImportError:
                 pass
@@ -4307,7 +4287,7 @@ html.highcontrast header{backdrop-filter:none!important;background:rgba(5,5,16,.
 /* ============================================================
    ENHANCEMENT 10: Emergency Stop + Micro-Interactions
    ============================================================ */
-.emergency-stop{position:fixed;bottom:68px;right:12px;z-index:950;
+.emergency-stop{position:fixed;bottom:68px;left:12px;z-index:950;
   width:56px;height:56px;border-radius:50%;
   background:linear-gradient(135deg,#cc0000,#990000);
   color:#fff;border:3px solid #ff3333;
@@ -4360,6 +4340,8 @@ html.highcontrast header{backdrop-filter:none!important;background:rgba(5,5,16,.
   <div class="ss-item"><span class="ss-label">Dec</span><span class="ss-value" id="ss-dec">--</span></div>
   <div class="ss-divider"></div>
   <div class="ss-item"><span class="ss-label">Alt</span><span class="ss-value" id="ss-alt">--</span></div>
+  <div class="ss-divider"></div>
+  <div class="ss-item"><span class="ss-label">Az</span><span class="ss-value" id="ss-az">--</span></div>
   <div class="ss-divider"></div>
   <div class="ss-item"><span class="ss-label">Tracking</span><span class="ss-value" id="ss-tracking" style="color:var(--red)">OFF</span></div>
   <div class="ss-divider"></div>
@@ -4597,7 +4579,6 @@ html.highcontrast header{backdrop-filter:none!important;background:rgba(5,5,16,.
     <h2>Park / Home</h2>
     <div class="flex-between">
       <span class="text-dim">Park: <span id="park-state">Unknown</span></span>
-      <span class="text-dim">Pier: <span id="pier-side">--</span></span>
     </div>
     <div class="btn-row mt-1">
       <button class="btn btn-dim btn-sm" onclick="confirmPark()">Park</button>
@@ -5020,18 +5001,7 @@ html.highcontrast header{backdrop-filter:none!important;background:rgba(5,5,16,.
       <input type="number" id="lim-overhead-input" placeholder="deg" min="60" max="91" style="max-width:60px;font-size:.8em">
       <button class="btn btn-dim btn-sm" onclick="setLimit('overhead')" style="font-size:.72em;padding:3px 6px">Set</button>
     </div>
-    <hr style="border-color:#333;margin:.6em 0">
-    <div class="text-dim" style="font-size:.8em">Meridian Limits (GEM)</div>
-    <div class="input-row" style="margin:4px 0">
-      <label style="font-size:.8em;min-width:36px">East</label>
-      <input type="number" id="lim-meridian-east" placeholder="min" min="0" style="max-width:60px;font-size:.8em">
-      <button class="btn btn-dim btn-sm" onclick="setMeridian('east')" style="font-size:.72em;padding:3px 6px">Set</button>
-    </div>
-    <div class="input-row" style="margin:4px 0">
-      <label style="font-size:.8em;min-width:36px">West</label>
-      <input type="number" id="lim-meridian-west" placeholder="min" min="0" style="max-width:60px;font-size:.8em">
-      <button class="btn btn-dim btn-sm" onclick="setMeridian('west')" style="font-size:.72em;padding:3px 6px">Set</button>
-    </div>
+
   </div>
 
   <!-- Auxiliary Features (OnStepX) -->
@@ -6087,9 +6057,8 @@ async function pollStatus() {
   // OnStep extended state
   const os = s.onstep || {};
 
-  // Park / Pier
+  // Park state
   setText('park-state', os.park_state || 'Unknown');
-  setText('pier-side', os.pier_side || '--');
 
   // Firmware
   setText('fw-name', os.firmware_name || '--');
@@ -6523,14 +6492,6 @@ function setLimit(type) {
   const val = parseInt(el.value);
   if (isNaN(val)) { alert('Enter degrees'); return; }
   apiPost('/api/mount/limits', { type, degrees: val });
-}
-
-function setMeridian(direction) {
-  const el = document.getElementById('lim-meridian-' + direction);
-  if (!el) return;
-  const val = parseInt(el.value);
-  if (isNaN(val) || val < 0) { alert('Enter minutes >= 0'); return; }
-  apiPost('/api/mount/meridian', { direction, minutes: val });
 }
 
 // OnStep: Auxiliary
@@ -10057,11 +10018,13 @@ function emergencyStop() {
       const ssRa = document.getElementById('p-ra');
       const ssDec = document.getElementById('p-dec');
       const ssAlt = document.getElementById('p-alt');
+      const ssAz = document.getElementById('p-az');
       const tDrift = document.getElementById('t-drift');
       const tRms = document.getElementById('t-rms');
       setText('ss-ra', ssRa ? ssRa.textContent : '--');
       setText('ss-dec', ssDec ? ssDec.textContent : '--');
       setText('ss-alt', ssAlt ? ssAlt.textContent : '--');
+      setText('ss-az', ssAz ? ssAz.textContent : '--');
       setText('ss-rms', tRms ? tRms.textContent : '--');
       // Tracking state from the header dot
       const dot = document.getElementById('hdr-dot');
